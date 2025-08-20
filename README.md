@@ -6,6 +6,13 @@
 
 A powerful CLI tool for creating and managing streaming data pipelines using Apache Kafka and FlinkSQL. Designed for local development with a complete Docker-based stack, AI-powered pipeline generation, and real-time monitoring dashboard. 
 
+## Screenshots
+
+<div align="center">
+  <img src="./docs/screenshot.png" alt="PipeGen Dashboard" width="800"/>
+  <p><em>Real-time monitoring dashboard with pipeline metrics and flow visualization</em></p>
+</div>
+
 ## Features
 
 - 🚀 **Project scaffolding** - Generate complete project structure with SQL and AVRO schemas
@@ -286,6 +293,11 @@ export PIPEGEN_LLM_MODEL="gpt-4"  # Optional, defaults to gpt-4
 ## 📊 Live Dashboard & Reporting
 
 PipeGen includes a sophisticated monitoring dashboard that provides real-time visibility into your streaming pipeline performance.
+
+<div align="center">
+  <img src="./docs/screenshot.png" alt="PipeGen Dashboard Screenshot" width="800"/>
+  <p><em>Real-time dashboard showing pipeline metrics, flow visualization, and system health</em></p>
+</div>
 
 ### Dashboard Features
 
