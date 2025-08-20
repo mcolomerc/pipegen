@@ -152,15 +152,19 @@ func printNextSteps(projectName string, localMode bool, isAIGenerated bool) {
 	fmt.Printf("1. cd %s\n", projectName)
 	
 	if localMode {
-		fmt.Println("2. Deploy local stack: pipegen deploy")
+		fmt.Println("2. Review and customize the generated files:")
+		fmt.Println("   • docker-compose.yml - Docker stack configuration")
+		fmt.Println("   • flink-conf.yaml - Flink configuration")
 		if isAIGenerated {
-			fmt.Println("3. Review AI-generated SQL statements in sql/ directory")
-			fmt.Println("4. Check generated AVRO schemas in schemas/ directory")
-			fmt.Println("5. Customize as needed, then run: pipegen run")
+			fmt.Println("   • sql/ - AI-generated SQL statements")
+			fmt.Println("   • schemas/ - AI-generated AVRO schemas")
+			fmt.Println("3. Deploy local stack: pipegen deploy")
+			fmt.Println("4. Run pipeline: pipegen run")
 		} else {
-			fmt.Println("3. Modify SQL statements in sql/ directory")
-			fmt.Println("4. Update AVRO schemas in schemas/ directory")  
-			fmt.Println("5. Run pipeline: pipegen run")
+			fmt.Println("   • sql/ - SQL statements for processing")
+			fmt.Println("   • schemas/ - AVRO schemas for events")
+			fmt.Println("3. Deploy local stack: pipegen deploy")
+			fmt.Println("4. Run pipeline: pipegen run")
 		}
 		
 		if !isAIGenerated {

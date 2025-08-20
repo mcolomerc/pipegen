@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // sanitizeAVROIdentifier converts a string to a valid AVRO identifier
@@ -68,6 +69,13 @@ func (g *ProjectGenerator) Generate() error {
 
 	if err := g.generateConfig(); err != nil {
 		return err
+	}
+
+	// Generate Docker and Flink configuration files for local development
+	if g.LocalMode {
+		if err := g.generateDockerFiles(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -407,6 +415,217 @@ cleanup_on_exit: true
 # flink_api_secret: "YOUR_FLINK_API_SECRET"
 # flink_environment: "YOUR_FLINK_ENVIRONMENT_ID"
 # flink_compute_pool: "YOUR_FLINK_COMPUTE_POOL_ID"`
+}
+
+func (g *ProjectGenerator) generateDockerFiles() error {
+	// Generate docker-compose.yml
+	if err := g.generateDockerCompose(); err != nil {
+		return err
+	}
+
+	// Generate flink-conf.yaml
+	if err := g.generateFlinkConfig(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *ProjectGenerator) generateDockerCompose() error {
+	// Import the docker compose generator
+	composer := &DockerComposeGenerator{}
+	composeContent, err := composer.Generate(true) // Include Schema Registry by default
+	if err != nil {
+		return err
+	}
+
+	composePath := filepath.Join(g.ProjectPath, "docker-compose.yml")
+	return writeFile(composePath, composeContent)
+}
+
+func (g *ProjectGenerator) generateFlinkConfig() error {
+	flinkConfig := `# Flink configuration for local development
+jobmanager.rpc.address: flink-jobmanager
+jobmanager.rpc.port: 6123
+jobmanager.heap.size: 1024m
+
+taskmanager.numberOfTaskSlots: 2
+taskmanager.memory.process.size: 1568m
+
+parallelism.default: 1
+
+# High Availability
+high-availability: none
+
+# Checkpointing
+state.backend: filesystem
+state.checkpoints.dir: file:///opt/flink/checkpoints
+state.savepoints.dir: file:///opt/flink/savepoints
+
+# Web UI
+web.tmpdir: /tmp/flink-web-ui
+web.upload.dir: /tmp/flink-web-upload
+
+# Metrics
+metrics.reporter.promgateway.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+`
+
+	flinkConfPath := filepath.Join(g.ProjectPath, "flink-conf.yaml")
+	return writeFile(flinkConfPath, flinkConfig)
+}
+
+// DockerComposeGenerator creates docker-compose.yml content for the streaming stack
+type DockerComposeGenerator struct{}
+
+// Generate creates the docker-compose.yml content
+func (g *DockerComposeGenerator) Generate(withSchemaRegistry bool) (string, error) {
+	var services []string
+
+	// Add Kafka service (KRaft mode)
+	services = append(services, g.generateKafkaService())
+
+	// Add Flink services
+	services = append(services, g.generateFlinkJobManager())
+	services = append(services, g.generateFlinkTaskManager())
+
+	// Add Schema Registry if requested
+	if withSchemaRegistry {
+		services = append(services, g.generateSchemaRegistry())
+	}
+
+	// Create volumes and networks
+	volumes := g.generateVolumes()
+	networks := g.generateNetworks()
+
+	// Combine everything
+	compose := fmt.Sprintf(`version: '3.8'
+
+services:
+%s
+
+%s
+
+%s
+`, strings.Join(services, "\n"), volumes, networks)
+
+	return compose, nil
+}
+
+func (g *DockerComposeGenerator) generateKafkaService() string {
+	return `  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: pipegen-kafka
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 19092
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - pipegen-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5`
+}
+
+func (g *DockerComposeGenerator) generateFlinkJobManager() string {
+	return `  flink-jobmanager:
+    image: flink:1.18.0-scala_2.12-java11
+    hostname: flink-jobmanager
+    container_name: pipegen-flink-jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      FLINK_PROPERTIES: "jobmanager.rpc.address: flink-jobmanager"
+    volumes:
+      - flink-data:/opt/flink/data
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    networks:
+      - pipegen-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5`
+}
+
+func (g *DockerComposeGenerator) generateFlinkTaskManager() string {
+	return `  flink-taskmanager:
+    image: flink:1.18.0-scala_2.12-java11
+    hostname: flink-taskmanager
+    container_name: pipegen-flink-taskmanager
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    command: taskmanager
+    scale: 1
+    environment:
+      FLINK_PROPERTIES: "jobmanager.rpc.address: flink-jobmanager"
+    volumes:
+      - flink-data:/opt/flink/data
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    networks:
+      - pipegen-network`
+}
+
+func (g *DockerComposeGenerator) generateSchemaRegistry() string {
+	return `  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    hostname: schema-registry
+    container_name: pipegen-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8082
+    networks:
+      - pipegen-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5`
+}
+
+func (g *DockerComposeGenerator) generateVolumes() string {
+	return `volumes:
+  kafka-data:
+    driver: local
+  flink-data:
+    driver: local`
+}
+
+func (g *DockerComposeGenerator) generateNetworks() string {
+	return `networks:
+  pipegen-network:
+    driver: bridge`
 }
 
 func (g *ProjectGenerator) getCloudConfig() string {
