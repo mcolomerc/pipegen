@@ -1,0 +1,64 @@
+# PipeGen Configuration File
+# Copy this file to .pipegen.yaml and customize for your environment
+
+# Local development mode (default: true for local Docker stack)
+local_mode: true
+
+# Kafka Configuration
+bootstrap_servers: "localhost:9092"
+
+# FlinkSQL Configuration
+flink_url: "http://localhost:8081"
+
+# Schema Registry Configuration (optional in local mode)
+schema_registry_url: "http://localhost:8085"
+
+# Pipeline Configuration
+pipeline:
+  name: "my-pipeline"
+  version: "1.0.0"
+  input_topic: "input-events"
+  output_topic: "processed-events"
+  
+# AVRO Schema Configuration
+avro:
+  namespace: "com.example.pipeline"
+  
+# Development Configuration
+dev:
+  auto_create_topics: true
+  cleanup_policy: "delete"
+
+# Pipeline Settings
+default_message_rate: 100      # Messages per second
+default_duration: "5m"         # Default runtime
+topic_prefix: "pipegen"        # Prefix for topic names
+cleanup_on_exit: true          # Clean up resources after run
+
+# Kafka Configuration for local development
+kafka_config:
+  partitions: 1                # Default partitions for new topics (reduced for local)
+  replication_factor: 1        # Replication factor (1 for single broker)
+  retention_ms: 604800000      # 7 days retention
+
+producer_config:
+  compression_type: "snappy"   # Message compression
+  batch_size: 16384           # Batch size in bytes
+  linger_ms: 5                # Batching delay
+
+consumer_config:
+  session_timeout_ms: 30000   # Consumer session timeout
+  heartbeat_interval_ms: 3000 # Heartbeat interval
+  max_poll_records: 500       # Max records per poll
+
+# For Cloud/Confluent deployment (when local_mode: false)
+# Uncomment and configure the following:
+#
+# api_key: "your-kafka-api-key"
+# api_secret: "your-kafka-api-secret"
+# schema_registry_key: "your-sr-key"
+# schema_registry_secret: "your-sr-secret"
+# flink_api_key: "your-flink-api-key"
+# flink_api_secret: "your-flink-api-secret"
+# flink_environment: "env-12345"
+# flink_compute_pool: "lfcp-12345"

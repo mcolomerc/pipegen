@@ -1,0 +1,148 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+pipegen
+pipegen.exe
+
+bin/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# node_modules (if any JS tools are used)
+node_modules/
+
+# Build artifacts
+build/
+dist/
+*.tar.gz
+*.zip
+
+# PipeGen specific files
+.pipegen.yaml
+*.avsc.backup
+*.sql.backup
+
+# Docker volumes and data
+docker-data/
+kafka-data/
+zookeeper-data/
+flink-data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# Generated reports
+reports/
+*.html.backup
+
+# Schema Registry data
+schema-registry-data/
+
+# Test artifacts
+test-results/
+test-output/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Local configuration overrides
+config.local.yaml
+.pipegen.local.yaml
+
+# Certificate files
+*.pem
+*.key
+*.crt
+
+# Generated protobuf files (if used)
+*.pb.go
+
+# Air live reloading tool
+tmp/
+
+# Delve debugger
+__debug_bin
+
+# GoLand
+.idea/
+
+# VS Code
+.vscode/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Vim
+*.swp
+*.swo
+
+# JetBrains
+*.iml
+.idea/
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Linux
+*~

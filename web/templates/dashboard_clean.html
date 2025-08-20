@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PipeGen Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #ff6b35;      /* Squirrel Orange */
+            --secondary-color: #cc3333;    /* Toolbox Red */
+            --accent-color: #666666;       /* Metal Gray */
+            --dark-color: #2c3e50;         /* Dark Base */
+            --bg-light: #f8f9fa;           /* Background Light */
+            --text-primary: #2c3e50;
+            --text-secondary: #666666;
+            --border-color: #e0e6ed;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1rem;
+            gap: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 1.5rem 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--success-color);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Card styles */
+        .card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-content {
+            padding: 1.5rem;
+        }
+
+        /* First Row - Pipeline Flow & Key Metrics Combined */
+        .combined-card {
+            margin-bottom: 2rem;
+        }
+
+        .pipeline-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 8px;
+        }
+
+        .flow-item {
+            flex: 1;
+            max-width: 200px;
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .flow-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
+        }
+
+        .flow-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .flow-logo {
+            width: 20px;
+            height: 20px;
+        }
+
+        .flow-details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .flow-details div {
+            margin-bottom: 0.25rem;
+        }
+
+        .flow-arrow {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .compact-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .compact-metric {
+            text-align: center;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 6px;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            transition: width 0.3s ease;
+            border-radius: 3px;
+        }
+
+        /* Second Row */
+        .second-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Messages */
+        .messages-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .message-section h4 {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .message-box {
+            background: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            min-height: 80px;
+            overflow-y: auto;
+        }
+
+        .message-placeholder {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* System Health */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 6px;
+        }
+
+        /* Charts */
+        canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+
+        /* Full width cards */
+        .full-width {
+            grid-column: 1 / -1;
+            margin-bottom: 1rem;
+        }
+
+        /* Logs */
+        .log-container {
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            height: 300px;
+            overflow-y: auto;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+            white-space: pre-wrap;
+        }
+
+        /* Error list */
+        .error-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .error-item {
+            background: #ffeaea;
+            border: 1px solid #ffcccb;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0.5rem;
+            }
+
+            .header {
+                flex-direction: column;
+                text-align: center;
+                gap: 1rem;
+            }
+
+            .pipeline-flow {
+                flex-direction: column;
+            }
+
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+
+            .compact-metrics {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .messages-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <img src="/static/pipegen.png?v=3" alt="PipeGen" class="logo">
+                <h1>PipeGen Dashboard</h1>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Live</span>
+                </div>
+                <div id="lastUpdate">Last update: --:--:--</div>
+            </div>
+        </div>
+
+        <!-- First Row - Combined Pipeline Flow & Key Metrics -->
+        <div class="card combined-card">
+            <div class="card-header">
+                <div class="card-title">🔄 Pipeline Flow & Key Metrics</div>
+            </div>
+            <div class="card-content">
+                <!-- Pipeline Flow -->
+                <div class="pipeline-flow">
+                    <div class="flow-item" id="producerFlow">
+                        <div class="flow-header">
+                            <img src="/static/kafka-logo.png?v=3" alt="Kafka" class="flow-logo">
+                            Producer
+                        </div>
+                        <div class="flow-details">
+                            <div id="producerRate">0 msg/s</div>
+                            <div class="flow-topic" id="producerTopic">Topic: -</div>
+                            <div class="flow-messages" id="producerMessages">Messages: 0</div>
+                        </div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-item" id="flinkFlow">
+                        <div class="flow-header">
+                            <img src="/static/flink-logo.png?v=3" alt="Flink" class="flow-logo">
+                            Flink SQL
+                        </div>
+                        <div class="flow-details">
+                            <div id="flinkJob">Job: -</div>
+                            <div class="flow-topic" id="flinkStatus">Status: -</div>
+                            <div class="flow-messages" id="flinkRecords">Records: 0</div>
+                        </div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-item" id="consumerFlow">
+                        <div class="flow-header">
+                            <img src="/static/kafka-logo.png?v=3" alt="Kafka" class="flow-logo">
+                            Consumer
+                        </div>
+                        <div class="flow-details">
+                            <div id="consumerRate">0 msg/s</div>
+                            <div class="flow-topic" id="consumerTopic">Topic: -</div>
+                            <div class="flow-messages" id="consumerMessages">Messages: 0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Metrics -->
+                <div class="compact-metrics">
+                    <div class="compact-metric">
+                        <div class="metric-value" id="totalMessages">0</div>
+                        <div class="metric-label">Messages</div>
+                    </div>
+                    <div class="compact-metric">
+                        <div class="metric-value" id="throughput">0</div>
+                        <div class="metric-label">msg/sec</div>
+                    </div>
+                    <div class="compact-metric">
+                        <div class="metric-value" id="successRate">0%</div>
+                        <div class="metric-label">Success Rate</div>
+                    </div>
+                    <div class="compact-metric">
+                        <div class="metric-value" id="avgLatency">0ms</div>
+                        <div class="metric-label">Avg Latency</div>
+                    </div>
+                </div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="pipelineProgress" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Second Row -->
+        <div class="second-row">
+            <!-- Recent Messages -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">📨 Recent Messages</div>
+                </div>
+                <div class="card-content">
+                    <div class="messages-container">
+                        <div class="message-section">
+                            <h4>📤 Last Produced Message</h4>
+                            <div class="message-box" id="lastProducedMessage">
+                                <div class="message-placeholder">No messages produced yet...</div>
+                            </div>
+                        </div>
+                        <div class="message-section">
+                            <h4>👂 Last Consumed Message</h4>
+                            <div class="message-box" id="lastConsumedMessage">
+                                <div class="message-placeholder">No messages consumed yet...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">💚 System Health</div>
+                </div>
+                <div class="card-content">
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-value" id="kafkaBrokers">0</div>
+                            <div class="metric-label">Kafka Brokers</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value" id="flinkTaskManagers">0</div>
+                            <div class="metric-label">Flink TMs</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value" id="errorCount">0</div>
+                            <div class="metric-label">Errors</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Chart -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">📊 Performance Trends</div>
+                </div>
+                <div class="card-content">
+                    <canvas id="performanceChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Third Row - Full Width -->
+        <div class="card full-width">
+            <div class="card-header">
+                <div class="card-title">🚀 Message Throughput</div>
+            </div>
+            <div class="card-content">
+                <canvas id="throughputChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Fourth Row - Full Width -->
+        <div class="card full-width">
+            <div class="card-header">
+                <div class="card-title">📋 Live Logs</div>
+            </div>
+            <div class="card-content">
+                <div class="log-container" id="logContainer">
+                    <div class="log-entry">Pipeline initializing...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chart.js configuration and data
+        let performanceChart = null;
+        let throughputChart = null;
+        const performanceData = {
+            labels: [],
+            datasets: [{
+                label: 'Latency (ms)',
+                data: [],
+                borderColor: '#ff6b35',
+                backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        };
+
+        const throughputData = {
+            labels: [],
+            datasets: [{
+                label: 'Messages/sec',
+                data: [],
+                borderColor: '#cc3333',
+                backgroundColor: 'rgba(204, 51, 51, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        };
+
+        // Initialize charts
+        function initCharts() {
+            const ctxPerf = document.getElementById('performanceChart').getContext('2d');
+            const ctxThroughput = document.getElementById('throughputChart').getContext('2d');
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        display: true,
+                        grid: {
+                            color: '#e0e6ed'
+                        }
+                    },
+                    y: {
+                        display: true,
+                        grid: {
+                            color: '#e0e6ed'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                }
+            };
+
+            performanceChart = new Chart(ctxPerf, {
+                type: 'line',
+                data: performanceData,
+                options: chartOptions
+            });
+
+            throughputChart = new Chart(ctxThroughput, {
+                type: 'line',
+                data: throughputData,
+                options: chartOptions
+            });
+        }
+
+        // WebSocket connection
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function(event) {
+                    console.log('Connected to WebSocket');
+                    reconnectAttempts = 0;
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateDashboard(data);
+                    } catch (e) {
+                        console.error('Error parsing WebSocket message:', e);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    console.log('WebSocket connection closed');
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        setTimeout(connectWebSocket, 3000);
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                };
+            } catch (e) {
+                console.error('Failed to create WebSocket connection:', e);
+            }
+        }
+
+        // Update dashboard with new data
+        function updateDashboard(data) {
+            // Update timestamp
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                `Last update: ${now.toLocaleTimeString()}`;
+
+            // Update metrics
+            if (data.metrics) {
+                const metrics = data.metrics;
+                updateElement('totalMessages', metrics.totalMessages || 0);
+                updateElement('throughput', metrics.throughput || 0);
+                updateElement('successRate', (metrics.successRate || 0) + '%');
+                updateElement('avgLatency', (metrics.avgLatency || 0) + 'ms');
+                updateElement('errorCount', metrics.errorCount || 0);
+                updateElement('kafkaBrokers', metrics.kafkaBrokers || 0);
+                updateElement('flinkTaskManagers', metrics.flinkTaskManagers || 0);
+
+                // Update progress bar
+                const progress = Math.min((metrics.throughput || 0) / 100 * 100, 100);
+                document.getElementById('pipelineProgress').style.width = progress + '%';
+            }
+
+            // Update flow items
+            if (data.producer) {
+                updateFlowItem('producer', data.producer);
+            }
+            if (data.flink) {
+                updateFlowItem('flink', data.flink);
+            }
+            if (data.consumer) {
+                updateFlowItem('consumer', data.consumer);
+            }
+
+            // Update messages
+            if (data.lastProducedMessage) {
+                updateElement('lastProducedMessage', 
+                    `<div style="color: #28a745;">${JSON.stringify(data.lastProducedMessage, null, 2)}</div>`);
+            }
+            if (data.lastConsumedMessage) {
+                updateElement('lastConsumedMessage', 
+                    `<div style="color: #17a2b8;">${JSON.stringify(data.lastConsumedMessage, null, 2)}</div>`);
+            }
+
+            // Update charts
+            if (data.chartData) {
+                updateCharts(data.chartData);
+            }
+
+            // Update logs
+            if (data.logEntry) {
+                addLogEntry(data.logEntry);
+            }
+        }
+
+        function updateFlowItem(type, data) {
+            if (type === 'producer') {
+                updateElement('producerRate', (data.rate || 0) + ' msg/s');
+                updateElement('producerTopic', 'Topic: ' + (data.topic || '-'));
+                updateElement('producerMessages', 'Messages: ' + (data.messages || 0));
+            } else if (type === 'flink') {
+                updateElement('flinkJob', 'Job: ' + (data.job || '-'));
+                updateElement('flinkStatus', 'Status: ' + (data.status || '-'));
+                updateElement('flinkRecords', 'Records: ' + (data.records || 0));
+            } else if (type === 'consumer') {
+                updateElement('consumerRate', (data.rate || 0) + ' msg/s');
+                updateElement('consumerTopic', 'Topic: ' + (data.topic || '-'));
+                updateElement('consumerMessages', 'Messages: ' + (data.messages || 0));
+            }
+        }
+
+        function updateElement(id, value) {
+            const element = document.getElementById(id);
+            if (element) {
+                if (typeof value === 'string' && value.includes('<')) {
+                    element.innerHTML = value;
+                } else {
+                    element.textContent = value;
+                }
+            }
+        }
+
+        function updateCharts(chartData) {
+            const timestamp = new Date().toLocaleTimeString();
+
+            // Performance chart
+            if (chartData.latency !== undefined) {
+                performanceData.labels.push(timestamp);
+                performanceData.datasets[0].data.push(chartData.latency);
+
+                if (performanceData.labels.length > 20) {
+                    performanceData.labels.shift();
+                    performanceData.datasets[0].data.shift();
+                }
+
+                if (performanceChart) {
+                    performanceChart.update('none');
+                }
+            }
+
+            // Throughput chart
+            if (chartData.throughput !== undefined) {
+                throughputData.labels.push(timestamp);
+                throughputData.datasets[0].data.push(chartData.throughput);
+
+                if (throughputData.labels.length > 20) {
+                    throughputData.labels.shift();
+                    throughputData.datasets[0].data.shift();
+                }
+
+                if (throughputChart) {
+                    throughputChart.update('none');
+                }
+            }
+        }
+
+        function addLogEntry(entry) {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${entry}`;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Keep only last 100 log entries
+            while (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        // Simulate some initial data for demo
+        function generateDemoData() {
+            const demoData = {
+                metrics: {
+                    totalMessages: Math.floor(Math.random() * 10000),
+                    throughput: Math.floor(Math.random() * 500),
+                    successRate: (95 + Math.random() * 5).toFixed(1),
+                    avgLatency: Math.floor(Math.random() * 100 + 10),
+                    errorCount: Math.floor(Math.random() * 5),
+                    kafkaBrokers: 3,
+                    flinkTaskManagers: 2
+                },
+                producer: {
+                    rate: Math.floor(Math.random() * 200),
+                    topic: 'orders-input',
+                    messages: Math.floor(Math.random() * 5000)
+                },
+                flink: {
+                    job: 'order-processor-v1',
+                    status: 'RUNNING',
+                    records: Math.floor(Math.random() * 4800)
+                },
+                consumer: {
+                    rate: Math.floor(Math.random() * 180),
+                    topic: 'orders-processed',
+                    messages: Math.floor(Math.random() * 4500)
+                },
+                chartData: {
+                    latency: Math.floor(Math.random() * 100 + 10),
+                    throughput: Math.floor(Math.random() * 500)
+                }
+            };
+
+            updateDashboard(demoData);
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            connectWebSocket();
+            
+            // Generate demo data every 2 seconds
+            setInterval(generateDemoData, 2000);
+            generateDemoData(); // Initial call
+        });
+    </script>
+</body>
+</html>
