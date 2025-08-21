@@ -182,6 +182,9 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 		return fmt.Errorf("failed to create pipeline runner: %w", err)
 	}
 
+	// Set dashboard server for SQL statement tracking
+	runner.SetDashboardServer(dashboardServer)
+
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -195,7 +198,10 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 			Status:           "RUNNING",
 			Duration:         0,
 			KafkaMetrics:     &dashboard.KafkaMetrics{Topics: make(map[string]*dashboard.TopicMetrics)},
-			FlinkMetrics:     &dashboard.FlinkMetrics{Jobs: make(map[string]*dashboard.FlinkJob)},
+			FlinkMetrics:     &dashboard.FlinkMetrics{
+				Jobs:          make(map[string]*dashboard.FlinkJob),
+				SQLStatements: make(map[string]*dashboard.FlinkStatement),
+			},
 			ProducerMetrics:  &dashboard.ProducerMetrics{Status: "STARTING"},
 			ConsumerMetrics:  &dashboard.ConsumerMetrics{Status: "STARTING"},
 			ExecutionSummary: &dashboard.ExecutionSummary{

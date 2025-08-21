@@ -193,37 +193,235 @@
         }
 
         .pipeline-flow {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr auto 1fr;
-            grid-template-rows: auto auto auto auto auto;
+            display: flex;
+            flex-direction: column;
             gap: 1rem;
             margin-bottom: 2rem;
             padding: 2rem;
             background: linear-gradient(135deg, #f8f9fa, #e9ecef);
             border-radius: 8px;
             align-items: center;
-            justify-items: center;
         }
 
-        .flow-producer {
-            grid-column: 1;
-            grid-row: 3;
+        /* Top Row: Producer → Kafka */
+        .pipeline-flow > .flow-item.flow-producer,
+        .pipeline-flow > .arrow-producer-kafka,
+        .pipeline-flow > .flow-item.kafka-central {
+            display: inline-block;
+            margin: 0 1rem;
         }
 
-        .flow-kafka {
-            grid-column: 3;
-            grid-row: 3;
+        /* Producer, Kafka, Consumer in horizontal layout for top section */
+        .flow-top-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        /* FlinkSQL Section */
+        .flink-statements-section {
+            width: 100%;
+            background: linear-gradient(135deg, #fff8f5, #fef2ed);
+            border: 2px solid var(--info-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+
+        .flink-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .flink-section-header span {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .flink-section-logo {
+            width: 32px;
+            height: 32px;
+        }
+
+        .flink-cluster-status {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* SQL Statements Container */
+        .sql-statements-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        /* Individual SQL Statement */
+        .sql-statement {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            transition: all 0.3s ease;
             position: relative;
         }
 
-        .flow-flink {
-            grid-column: 3;
-            grid-row: 1;
+        .sql-statement.status-pending {
+            border-color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        .sql-statement.status-running {
+            border-color: var(--info-color);
+            box-shadow: 0 4px 12px rgba(23, 162, 184, 0.15);
+            background: linear-gradient(135deg, #ffffff, #f0f9ff);
+        }
+
+        .sql-statement.status-completed {
+            border-color: var(--success-color);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.15);
+            background: linear-gradient(135deg, #ffffff, #f0fff4);
+        }
+
+        .sql-statement.status-failed {
+            border-color: var(--danger-color);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.15);
+            background: linear-gradient(135deg, #ffffff, #fef2f2);
+        }
+
+        .sql-statement-order {
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            margin-right: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .sql-statement.status-pending .sql-statement-order {
+            background: var(--text-secondary);
+        }
+
+        .sql-statement.status-running .sql-statement-order {
+            background: var(--info-color);
+            animation: pulse 2s infinite;
+        }
+
+        .sql-statement.status-completed .sql-statement-order {
+            background: var(--success-color);
+        }
+
+        .sql-statement.status-failed .sql-statement-order {
+            background: var(--danger-color);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .sql-statement-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .sql-statement-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+        }
+
+        .sql-statement-content {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            max-width: 400px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: 'Courier New', monospace;
+        }
+
+        .sql-statement-status {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.25rem;
+            margin-left: 1rem;
+        }
+
+        .sql-statement-phase {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 500;
+        }
+
+        .sql-statement.status-pending .sql-statement-phase {
+            background: var(--text-secondary);
+        }
+
+        .sql-statement.status-running .sql-statement-phase {
+            background: var(--info-color);
+        }
+
+        .sql-statement.status-completed .sql-statement-phase {
+            background: var(--success-color);
+        }
+
+        .sql-statement.status-failed .sql-statement-phase {
+            background: var(--danger-color);
+        }
+
+        .sql-statement-metrics {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        /* Arrow connections between statements */
+        .sql-statement-arrow {
+            text-align: center;
+            color: var(--info-color);
+            font-size: 1.2rem;
+            margin: -0.25rem 0;
+        }
+
+        /* Update existing flow styles */
+        .flow-producer {
+            grid-column: unset;
+            grid-row: unset;
+        }
+
+        .flow-kafka {
+            grid-column: unset;
+            grid-row: unset;
+            position: relative;
         }
 
         .flow-consumer {
-            grid-column: 5;
-            grid-row: 3;
+            grid-column: unset;
+            grid-row: unset;
         }
 
         .flow-icon {
@@ -574,54 +772,64 @@
                 <div class="card-title"><i class="fas fa-project-diagram" style="color: var(--primary-color);"></i> Pipeline Flow & Key Metrics</div>
             </div>
             <div class="card-content">
-                <!-- Pipeline Flow -->
+                <!-- Enhanced Pipeline Flow with SQL Statements -->
                 <div class="pipeline-flow">
-                    <!-- Flink SQL (Top) -->
-                    <div class="flow-item flink-item flow-flink" id="flinkFlow" onclick="openFlinkManager()">
-                        <div class="flow-header">
-                            <img src="/static/flink-logo.png?v=3" alt="Flink" class="flow-logo">
-                            <div>Flink SQL</div>
+                    <!-- Top Section: Producer → Kafka -->
+                    <div class="flow-top-section">
+                        <!-- Producer -->
+                        <div class="flow-item flow-producer" id="producerFlow">
+                            <div class="flow-header">
+                                <i class="fas fa-paper-plane flow-icon producer-icon"></i>
+                                <div>Producer</div>
+                            </div>
+                            <div class="flow-details">
+                                <div id="producerRate">0 msg/s</div>
+                                <div class="flow-topic" id="producerTopic">Topic: -</div>
+                                <div class="flow-messages" id="producerMessages">Messages: 0</div>
+                            </div>
                         </div>
-                        <div class="flow-details">
-                            <div id="flinkJob">Job: -</div>
-                            <div class="flow-topic" id="flinkJobStatus">Status: -</div>
-                            <div class="flow-messages" id="flinkRecords">Records: 0</div>
+
+                        <!-- Arrow: Producer → Kafka -->
+                        <div class="flow-arrow-horizontal arrow-producer-kafka">→</div>
+
+                        <!-- Central Kafka Broker -->
+                        <div class="flow-item kafka-central flow-kafka" id="kafkaFlow">
+                            <div class="flow-header">
+                                <img src="/static/kafka-logo.png?v=3" alt="Kafka" class="flow-logo">
+                                <div>Kafka Broker</div>
+                            </div>
+                            <div class="flow-details">
+                                <div id="kafkaBrokerStatus">Brokers: 0</div>
+                                <div class="flow-topic" id="kafkaTopics">Topics: 0</div>
+                                <div class="flow-messages" id="kafkaMessages">Total: 0</div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Producer (Left) -->
-                    <div class="flow-item flow-producer" id="producerFlow">
-                        <div class="flow-header">
-                            <i class="fas fa-paper-plane flow-icon producer-icon"></i>
-                            <div>Producer</div>
-                        </div>
-                        <div class="flow-details">
-                            <div id="producerRate">0 msg/s</div>
-                            <div class="flow-topic" id="producerTopic">Topic: -</div>
-                            <div class="flow-messages" id="producerMessages">Messages: 0</div>
-                        </div>
-                    </div>
+                    <!-- Arrow: Kafka → FlinkSQL -->
+                    <div class="flow-arrow-vertical arrow-kafka-flink">↓</div>
 
-                    <!-- Arrow: Producer → Kafka -->
-                    <div class="flow-arrow-horizontal arrow-producer-kafka">→</div>
-
-                    <!-- Central Kafka Broker -->
-                    <div class="flow-item kafka-central flow-kafka" id="kafkaFlow">
-                        <div class="flow-header">
-                            <img src="/static/kafka-logo.png?v=3" alt="Kafka" class="flow-logo">
-                            <div>Kafka Broker</div>
+                    <!-- FlinkSQL Statements Section -->
+                    <div class="flink-statements-section">
+                        <div class="flink-section-header">
+                            <img src="/static/flink-logo.png?v=3" alt="Flink" class="flink-section-logo">
+                            <span>FlinkSQL Processing Pipeline</span>
+                            <div class="flink-cluster-status">
+                                <div id="flinkClusterStatus">JobManager: -</div>
+                                <div id="flinkTaskManagers">TaskManagers: 0</div>
+                            </div>
                         </div>
-                        <div class="flow-details">
-                            <div id="kafkaBrokerStatus">Brokers: 0</div>
-                            <div class="flow-topic" id="kafkaTopics">Topics: 0</div>
-                            <div class="flow-messages" id="kafkaMessages">Total: 0</div>
+                        
+                        <!-- SQL Statements Container (dynamically populated) -->
+                        <div class="sql-statements-container" id="sqlStatementsContainer">
+                            <!-- SQL statements will be populated here by JavaScript -->
                         </div>
                     </div>
 
-                    <!-- Arrow: Kafka → Consumer -->
-                    <div class="flow-arrow-horizontal arrow-kafka-consumer">→</div>
+                    <!-- Arrow: FlinkSQL → Consumer -->
+                    <div class="flow-arrow-vertical arrow-flink-consumer">↓</div>
 
-                    <!-- Consumer (Right) -->
+                    <!-- Consumer -->
                     <div class="flow-item flow-consumer" id="consumerFlow">
                         <div class="flow-header">
                             <i class="fas fa-download flow-icon consumer-icon"></i>
@@ -633,9 +841,6 @@
                             <div class="flow-messages" id="consumerMessages">Messages: 0</div>
                         </div>
                     </div>
-
-                    <!-- Arrow: Flink ↔ Kafka (bidirectional) -->
-                    <div class="flow-arrow-vertical arrow-flink-kafka-down">↕</div>
                 </div>
 
                 <!-- Key Metrics -->
@@ -887,6 +1092,11 @@
                 updateFlowItem('consumer', data.consumer);
             }
 
+            // Update SQL statements
+            if (data.flink && data.flink.sql_statements) {
+                updateSQLStatements(data.flink.sql_statements);
+            }
+
             // Update messages
             if (data.lastProducedMessage) {
                 updateElement('lastProducedMessage', 
@@ -925,6 +1135,125 @@
                 updateElement('kafkaBrokerStatus', 'Brokers: ' + (data.brokers || 0));
                 updateElement('kafkaTopics', 'Topics: ' + (data.topics || 0));
                 updateElement('kafkaMessages', 'Total: ' + (data.totalMessages || 0));
+            }
+        }
+
+        function updateSQLStatements(sqlStatements) {
+            const container = document.getElementById('sqlStatementsContainer');
+            if (!container || !sqlStatements) return;
+
+            // Convert object to sorted array if needed
+            let statements = [];
+            if (Array.isArray(sqlStatements)) {
+                statements = sqlStatements;
+            } else {
+                statements = Object.values(sqlStatements);
+            }
+
+            // Sort by order
+            statements.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+            // Clear existing content
+            container.innerHTML = '';
+
+            statements.forEach((stmt, index) => {
+                // Create statement element
+                const stmtElement = document.createElement('div');
+                stmtElement.className = `sql-statement status-${(stmt.status || 'pending').toLowerCase()}`;
+                stmtElement.setAttribute('data-statement-id', stmt.id || stmt.name);
+
+                // Add statement order number
+                const orderElement = document.createElement('div');
+                orderElement.className = 'sql-statement-order';
+                orderElement.textContent = stmt.order || (index + 1);
+
+                // Add statement info
+                const infoElement = document.createElement('div');
+                infoElement.className = 'sql-statement-info';
+
+                const nameElement = document.createElement('div');
+                nameElement.className = 'sql-statement-name';
+                nameElement.textContent = stmt.name || `Statement ${index + 1}`;
+
+                const contentElement = document.createElement('div');
+                contentElement.className = 'sql-statement-content';
+                // Show first meaningful line of SQL, cleaned up
+                const content = (stmt.processed_content || stmt.content || '').trim();
+                const firstLine = content.split('\n')[0] || content;
+                contentElement.textContent = firstLine.length > 80 ? firstLine.substring(0, 80) + '...' : firstLine;
+
+                infoElement.appendChild(nameElement);
+                infoElement.appendChild(contentElement);
+
+                // Add statement status
+                const statusElement = document.createElement('div');
+                statusElement.className = 'sql-statement-status';
+
+                const phaseElement = document.createElement('div');
+                phaseElement.className = 'sql-statement-phase';
+                phaseElement.textContent = stmt.phase || stmt.status || 'PENDING';
+
+                const metricsElement = document.createElement('div');
+                metricsElement.className = 'sql-statement-metrics';
+                
+                let metricsText = '';
+                if (stmt.records_processed > 0) {
+                    metricsText += `${formatNumber(stmt.records_processed)} records`;
+                }
+                if (stmt.records_per_sec > 0) {
+                    metricsText += metricsText ? ` • ${formatNumber(stmt.records_per_sec)}/s` : `${formatNumber(stmt.records_per_sec)}/s`;
+                }
+                if (stmt.duration) {
+                    const duration = typeof stmt.duration === 'string' ? stmt.duration : formatDuration(stmt.duration);
+                    metricsText += metricsText ? ` • ${duration}` : duration;
+                }
+                
+                metricsElement.textContent = metricsText || '-';
+
+                statusElement.appendChild(phaseElement);
+                statusElement.appendChild(metricsElement);
+
+                // Assemble the statement
+                stmtElement.appendChild(orderElement);
+                stmtElement.appendChild(infoElement);
+                stmtElement.appendChild(statusElement);
+
+                // Add to container
+                container.appendChild(stmtElement);
+
+                // Add arrow between statements (except for last one)
+                if (index < statements.length - 1) {
+                    const arrowElement = document.createElement('div');
+                    arrowElement.className = 'sql-statement-arrow';
+                    arrowElement.innerHTML = '↓';
+                    container.appendChild(arrowElement);
+                }
+            });
+
+            // Update Flink cluster status
+            updateElement('flinkClusterStatus', 'JobManager: Online');
+            updateElement('flinkTaskManagers', `TaskManagers: ${statements.filter(s => s.status === 'RUNNING').length}`);
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+
+        function formatDuration(nanoseconds) {
+            if (typeof nanoseconds === 'string') return nanoseconds;
+            
+            const ms = nanoseconds / 1000000;
+            if (ms < 1000) {
+                return Math.round(ms) + 'ms';
+            } else if (ms < 60000) {
+                return Math.round(ms / 1000) + 's';
+            } else {
+                return Math.round(ms / 60000) + 'm';
             }
         }
 

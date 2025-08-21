@@ -28,6 +28,7 @@ type Runner struct {
 	flinkDeployer *FlinkDeployer
 	sqlLoader     *SQLLoader
 	schemaLoader  *SchemaLoader
+	dashboardServer interface{} // Can be nil if no dashboard integration
 }
 
 // NewRunner creates a new pipeline runner
@@ -59,6 +60,11 @@ func NewRunner(config *Config) (*Runner, error) {
 	}, nil
 }
 
+// SetDashboardServer sets the dashboard server for integration
+func (r *Runner) SetDashboardServer(dashboardServer interface{}) {
+	r.dashboardServer = dashboardServer
+}
+
 // Run executes the complete pipeline
 func (r *Runner) Run(ctx context.Context) error {
 	fmt.Println("🔄 Starting pipeline execution...")
@@ -70,6 +76,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load SQL statements: %w", err)
 	}
 	fmt.Printf("✅ Loaded %d SQL statements\n", len(sqlStatements))
+
+	// Initialize SQL statement tracking if dashboard is connected
+	if r.dashboardServer != nil {
+		r.initializeSQLTracking(sqlStatements)
+	}
 
 	// Step 2: Load AVRO schemas
 	fmt.Println("📋 Loading AVRO schemas...")
@@ -103,7 +114,16 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// Step 6: Deploy FlinkSQL statements
 	fmt.Println("⚡ Deploying FlinkSQL statements...")
-	deploymentIDs, err := r.flinkDeployer.Deploy(ctx, sqlStatements, resources)
+	var deploymentIDs []string
+	
+	if r.dashboardServer != nil {
+		// Deploy with status tracking for dashboard integration
+		deploymentIDs, err = r.flinkDeployer.DeployWithStatusTracking(ctx, sqlStatements, resources, r.updateStatementStatus)
+	} else {
+		// Deploy normally without status tracking
+		deploymentIDs, err = r.flinkDeployer.Deploy(ctx, sqlStatements, resources)
+	}
+	
 	if err != nil {
 		return fmt.Errorf("failed to deploy FlinkSQL: %w", err)
 	}
@@ -175,4 +195,35 @@ func (r *Runner) cleanup(ctx context.Context, resources *Resources, deploymentID
 	}
 
 	return nil
+}
+
+// initializeSQLTracking initializes SQL statement tracking in the dashboard
+func (r *Runner) initializeSQLTracking(statements []*SQLStatement) {
+	// Create variables map for substitution
+	variables := map[string]string{
+		"${BOOTSTRAP_SERVERS}": r.config.BootstrapServers,
+		"${SCHEMA_REGISTRY_URL}": r.config.SchemaRegistryURL,
+		"${FLINK_URL}": r.config.FlinkURL,
+	}
+	
+	// Use type assertion to access dashboard methods
+	if ds, ok := r.dashboardServer.(interface {
+		InitializeSQLStatements([]*SQLStatement, map[string]string)
+	}); ok {
+		ds.InitializeSQLStatements(statements, variables)
+	}
+}
+
+// updateStatementStatus updates the status of an SQL statement in the dashboard
+func (r *Runner) updateStatementStatus(statementName, status, phase string, deploymentID string, errorMsg string) {
+	if r.dashboardServer == nil {
+		return
+	}
+	
+	// Use type assertion to access dashboard methods
+	if ds, ok := r.dashboardServer.(interface {
+		UpdateStatementStatus(string, string, string, string, string)
+	}); ok {
+		ds.UpdateStatementStatus(statementName, status, phase, deploymentID, errorMsg)
+	}
 }

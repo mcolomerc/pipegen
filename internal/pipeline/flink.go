@@ -44,6 +44,49 @@ func (fd *FlinkDeployer) Deploy(ctx context.Context, statements []*SQLStatement,
 	return deploymentIDs, nil
 }
 
+// StatusCallback is a function type for statement status updates
+type StatusCallback func(statementName, status, phase, deploymentID, errorMsg string)
+
+// DeployWithStatusTracking executes FlinkSQL statements with status tracking
+func (fd *FlinkDeployer) DeployWithStatusTracking(ctx context.Context, statements []*SQLStatement, resources *Resources, statusCallback StatusCallback) ([]string, error) {
+	fmt.Printf("⚡ Deploying %d FlinkSQL statements with status tracking...\n", len(statements))
+
+	var deploymentIDs []string
+
+	for i, stmt := range statements {
+		fmt.Printf("📝 Deploying statement %d: %s\n", i+1, stmt.Name)
+
+		// Update status to deploying
+		if statusCallback != nil {
+			statusCallback(stmt.Name, "RUNNING", "DEPLOYING", "", "")
+		}
+
+		// Substitute variables in SQL statement
+		processedSQL := fd.substituteVariables(stmt.Content, resources)
+
+		// Deploy the statement
+		deploymentID, err := fd.deployStatement(ctx, stmt.Name, processedSQL)
+		if err != nil {
+			// Update status to failed
+			if statusCallback != nil {
+				statusCallback(stmt.Name, "FAILED", "ERROR", "", err.Error())
+			}
+			return deploymentIDs, fmt.Errorf("failed to deploy statement %s: %w", stmt.Name, err)
+		}
+
+		deploymentIDs = append(deploymentIDs, deploymentID)
+		fmt.Printf("  ✅ Deployed with ID: %s\n", deploymentID)
+
+		// Update status to running
+		if statusCallback != nil {
+			statusCallback(stmt.Name, "RUNNING", "ACTIVE", deploymentID, "")
+		}
+	}
+
+	fmt.Printf("✅ All %d statements deployed successfully\n", len(statements))
+	return deploymentIDs, nil
+}
+
 // deployStatement deploys a single FlinkSQL statement
 func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) (string, error) {
 	// TODO: Implement actual Confluent Cloud FlinkSQL API call

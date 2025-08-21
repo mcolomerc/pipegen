@@ -173,6 +173,9 @@ func runPipelineWithDashboard(ctx context.Context, config *pipeline.Config, dash
 		return fmt.Errorf("failed to create pipeline runner: %w", err)
 	}
 
+	// Set dashboard server for SQL statement tracking
+	runner.SetDashboardServer(dashboardServer)
+
 	// Create dashboard status tracker
 	statusTracker := &DashboardStatusTracker{
 		dashboardServer: dashboardServer,
@@ -185,7 +188,10 @@ func runPipelineWithDashboard(ctx context.Context, config *pipeline.Config, dash
 		Status:           "STARTING",
 		Duration:         0,
 		KafkaMetrics:     &dashboard.KafkaMetrics{Topics: make(map[string]*dashboard.TopicMetrics)},
-		FlinkMetrics:     &dashboard.FlinkMetrics{Jobs: make(map[string]*dashboard.FlinkJob)},
+		FlinkMetrics:     &dashboard.FlinkMetrics{
+			Jobs:          make(map[string]*dashboard.FlinkJob),
+			SQLStatements: make(map[string]*dashboard.FlinkStatement),
+		},
 		ProducerMetrics:  &dashboard.ProducerMetrics{},
 		ConsumerMetrics:  &dashboard.ConsumerMetrics{},
 		ExecutionSummary: &dashboard.ExecutionSummary{

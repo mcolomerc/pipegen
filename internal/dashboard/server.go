@@ -95,11 +95,34 @@ type TopicMetrics struct {
 
 // FlinkMetrics holds Flink job and cluster metrics
 type FlinkMetrics struct {
-	JobManagerStatus string                  `json:"jobmanager_status"`
-	TaskManagerCount int                     `json:"taskmanager_count"`
-	Jobs             map[string]*FlinkJob    `json:"jobs"`
-	ClusterMetrics   *FlinkClusterMetrics    `json:"cluster_metrics"`
-	CheckpointStats  *CheckpointStats        `json:"checkpoint_stats"`
+	JobManagerStatus string                     `json:"jobmanager_status"`
+	TaskManagerCount int                        `json:"taskmanager_count"`
+	Jobs             map[string]*FlinkJob       `json:"jobs"`
+	ClusterMetrics   *FlinkClusterMetrics       `json:"cluster_metrics"`
+	CheckpointStats  *CheckpointStats           `json:"checkpoint_stats"`
+	SQLStatements    map[string]*FlinkStatement `json:"sql_statements"`
+}
+
+// FlinkStatement holds individual FlinkSQL statement metrics and status
+type FlinkStatement struct {
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	Order            int               `json:"order"`
+	Status           string            `json:"status"`           // PENDING, RUNNING, COMPLETED, FAILED
+	Phase            string            `json:"phase"`            // PREPARING, STARTING, RUNNING, FINISHED, ERROR
+	Content          string            `json:"content"`
+	ProcessedContent string            `json:"processed_content"`
+	FilePath         string            `json:"file_path"`
+	DeploymentID     string            `json:"deployment_id"`
+	StartTime        *time.Time        `json:"start_time,omitempty"`
+	CompletionTime   *time.Time        `json:"completion_time,omitempty"`
+	Duration         *time.Duration    `json:"duration,omitempty"`
+	RecordsProcessed int64             `json:"records_processed"`
+	RecordsPerSec    float64           `json:"records_per_sec"`
+	Parallelism      int               `json:"parallelism"`
+	ErrorMessage     string            `json:"error_message,omitempty"`
+	Dependencies     []string          `json:"dependencies"`     // Names of statements this depends on
+	Variables        map[string]string `json:"variables"`
 }
 
 // FlinkJob holds individual job metrics
@@ -315,6 +338,26 @@ func (ds *DashboardServer) Stop(ctx context.Context) error {
 // GetMetricsCollector returns the metrics collector instance
 func (ds *DashboardServer) GetMetricsCollector() *MetricsCollector {
 	return ds.metricsCollector
+}
+
+// InitializeSQLStatements initializes tracking for FlinkSQL statements
+func (ds *DashboardServer) InitializeSQLStatements(statements []*pipeline.SQLStatement, variables map[string]string) {
+	ds.metricsCollector.InitializeSQLStatements(statements, variables)
+}
+
+// UpdateStatementStatus updates the status of a FlinkSQL statement
+func (ds *DashboardServer) UpdateStatementStatus(statementName, status, phase string, deploymentID string, errorMsg string) {
+	ds.metricsCollector.UpdateStatementStatus(statementName, status, phase, deploymentID, errorMsg)
+}
+
+// UpdateStatementMetrics updates runtime metrics for a FlinkSQL statement
+func (ds *DashboardServer) UpdateStatementMetrics(statementName string, recordsProcessed int64, recordsPerSec float64, parallelism int) {
+	ds.metricsCollector.UpdateStatementMetrics(statementName, recordsProcessed, recordsPerSec, parallelism)
+}
+
+// SetStatementDependencies sets the dependency chain for SQL statements
+func (ds *DashboardServer) SetStatementDependencies(dependencies map[string][]string) {
+	ds.metricsCollector.SetStatementDependencies(dependencies)
 }
 
 // UpdatePipelineStatus updates the pipeline status with thread safety

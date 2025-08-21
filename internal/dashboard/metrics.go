@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
+	"pipegen/internal/pipeline"
 )
 
 // MetricsCollector collects metrics from various pipeline components
@@ -33,7 +34,10 @@ type MetricsCollector struct {
 func NewMetricsCollector() *MetricsCollector {
 	return &MetricsCollector{
 		kafkaMetrics:    &KafkaMetrics{Topics: make(map[string]*TopicMetrics)},
-		flinkMetrics:    &FlinkMetrics{Jobs: make(map[string]*FlinkJob)},
+		flinkMetrics:    &FlinkMetrics{
+			Jobs:          make(map[string]*FlinkJob),
+			SQLStatements: make(map[string]*FlinkStatement),
+		},
 		kafkaInterval:   2 * time.Second,
 		flinkInterval:   3 * time.Second,
 	}
@@ -433,4 +437,117 @@ func (mc *MetricsCollector) suggestResolution(component, message string) string 
 	}
 	
 	return "Check component logs and configuration settings for more details."
+}
+
+// InitializeSQLStatements initializes SQL statement tracking from loaded statements
+func (mc *MetricsCollector) InitializeSQLStatements(statements []*pipeline.SQLStatement, variables map[string]string) {
+	mc.metricsLock.Lock()
+	defer mc.metricsLock.Unlock()
+	
+	for _, stmt := range statements {
+		flinkStmt := &FlinkStatement{
+			ID:               generateStatementID(stmt.Name),
+			Name:             stmt.Name,
+			Order:            stmt.Order,
+			Status:           "PENDING",
+			Phase:            "PREPARING",
+			Content:          stmt.Content,
+			ProcessedContent: "", // Will be set when processed
+			FilePath:         stmt.FilePath,
+			Variables:        make(map[string]string),
+		}
+		
+		// Copy variables
+		for k, v := range variables {
+			flinkStmt.Variables[k] = v
+		}
+		
+		mc.flinkMetrics.SQLStatements[stmt.Name] = flinkStmt
+	}
+}
+
+// UpdateStatementStatus updates the status of a FlinkSQL statement
+func (mc *MetricsCollector) UpdateStatementStatus(statementName, status, phase string, deploymentID string, errorMsg string) {
+	mc.metricsLock.Lock()
+	defer mc.metricsLock.Unlock()
+	
+	stmt, exists := mc.flinkMetrics.SQLStatements[statementName]
+	if !exists {
+		return
+	}
+	
+	oldStatus := stmt.Status
+	stmt.Status = status
+	stmt.Phase = phase
+	stmt.DeploymentID = deploymentID
+	stmt.ErrorMessage = errorMsg
+	
+	now := time.Now()
+	
+	// Handle status transitions
+	switch status {
+	case "RUNNING":
+		if oldStatus == "PENDING" {
+			stmt.StartTime = &now
+		}
+	case "COMPLETED":
+		if stmt.StartTime != nil {
+			duration := now.Sub(*stmt.StartTime)
+			stmt.Duration = &duration
+		}
+		stmt.CompletionTime = &now
+	case "FAILED":
+		if stmt.StartTime != nil {
+			duration := now.Sub(*stmt.StartTime)
+			stmt.Duration = &duration
+		}
+		stmt.CompletionTime = &now
+	}
+}
+
+// UpdateStatementMetrics updates runtime metrics for a FlinkSQL statement
+func (mc *MetricsCollector) UpdateStatementMetrics(statementName string, recordsProcessed int64, recordsPerSec float64, parallelism int) {
+	mc.metricsLock.Lock()
+	defer mc.metricsLock.Unlock()
+	
+	stmt, exists := mc.flinkMetrics.SQLStatements[statementName]
+	if !exists {
+		return
+	}
+	
+	stmt.RecordsProcessed = recordsProcessed
+	stmt.RecordsPerSec = recordsPerSec
+	stmt.Parallelism = parallelism
+}
+
+// GetSQLStatements returns a copy of current SQL statement metrics
+func (mc *MetricsCollector) GetSQLStatements() map[string]*FlinkStatement {
+	mc.metricsLock.RLock()
+	defer mc.metricsLock.RUnlock()
+	
+	statements := make(map[string]*FlinkStatement)
+	for k, v := range mc.flinkMetrics.SQLStatements {
+		// Deep copy to avoid race conditions
+		stmt := *v
+		statements[k] = &stmt
+	}
+	
+	return statements
+}
+
+// SetStatementDependencies sets the dependency chain for SQL statements
+func (mc *MetricsCollector) SetStatementDependencies(dependencies map[string][]string) {
+	mc.metricsLock.Lock()
+	defer mc.metricsLock.Unlock()
+	
+	for stmtName, deps := range dependencies {
+		if stmt, exists := mc.flinkMetrics.SQLStatements[stmtName]; exists {
+			stmt.Dependencies = deps
+		}
+	}
+}
+
+// generateStatementID generates a unique ID for a SQL statement
+func generateStatementID(name string) string {
+	return fmt.Sprintf("stmt-%s-%d", strings.ReplaceAll(strings.ToLower(name), " ", "-"), time.Now().UnixNano()%1000000)
 }
