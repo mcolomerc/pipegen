@@ -1,0 +1,24 @@
+# Flink configuration for local development
+jobmanager.rpc.address: flink-jobmanager
+jobmanager.rpc.port: 6123
+jobmanager.heap.size: 1024m
+
+taskmanager.numberOfTaskSlots: 2
+taskmanager.memory.process.size: 1568m
+
+parallelism.default: 1
+
+# High Availability
+high-availability: none
+
+# Checkpointing
+state.backend: filesystem
+state.checkpoints.dir: file:///opt/flink/checkpoints
+state.savepoints.dir: file:///opt/flink/savepoints
+
+# Web UI
+web.tmpdir: /tmp/flink-web-ui
+web.upload.dir: /tmp/flink-web-upload
+
+# Metrics
+metrics.reporter.promgateway.class: org.apache.flink.metrics.prometheus.PrometheusReporter
