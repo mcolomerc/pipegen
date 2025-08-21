@@ -547,6 +547,14 @@ func (mc *MetricsCollector) SetStatementDependencies(dependencies map[string][]s
 	}
 }
 
+// SetFlinkMetrics sets the entire FlinkMetrics object (used for standalone mode)
+func (mc *MetricsCollector) SetFlinkMetrics(flinkMetrics *FlinkMetrics) {
+	mc.metricsLock.Lock()
+	defer mc.metricsLock.Unlock()
+	
+	mc.flinkMetrics = flinkMetrics
+}
+
 // generateStatementID generates a unique ID for a SQL statement
 func generateStatementID(name string) string {
 	return fmt.Sprintf("stmt-%s-%d", strings.ReplaceAll(strings.ToLower(name), " ", "-"), time.Now().UnixNano()%1000000)

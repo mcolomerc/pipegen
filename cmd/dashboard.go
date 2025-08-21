@@ -134,6 +134,13 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		fmt.Println("📊 Dashboard running in standalone mode")
+		
+		// Load SQL statements from project directory for display
+		err := loadSQLStatementsForDashboard(projectDir, dashboardServer)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Could not load SQL statements: %v\n", err)
+		}
+		
 		fmt.Printf("🌐 Visit http://localhost:%d to view the dashboard\n", dashboardPort)
 		fmt.Println("Press Ctrl+C to stop")
 	}
@@ -353,6 +360,76 @@ func detectPipelineInfo(projectDir string) (string, string) {
 	}
 	
 	return dirName, ""
+}
+
+// loadSQLStatementsForDashboard loads SQL statements from project directory for standalone dashboard display
+func loadSQLStatementsForDashboard(projectDir string, dashboardServer *dashboard.DashboardServer) error {
+	sqlDir := filepath.Join(projectDir, "sql")
+	
+	// Check if SQL directory exists
+	if _, err := os.Stat(sqlDir); os.IsNotExist(err) {
+		return fmt.Errorf("SQL directory not found: %s", sqlDir)
+	}
+	
+	// Read SQL files
+	sqlFiles, err := filepath.Glob(filepath.Join(sqlDir, "*.sql"))
+	if err != nil {
+		return fmt.Errorf("error reading SQL files: %w", err)
+	}
+	
+	if len(sqlFiles) == 0 {
+		return fmt.Errorf("no SQL files found in %s", sqlDir)
+	}
+	
+	// Create FlinkMetrics with SQL statements for display
+	flinkMetrics := &dashboard.FlinkMetrics{
+		JobManagerStatus: "Offline (Standalone Mode)",
+		TaskManagerCount: 0,
+		Jobs:            make(map[string]*dashboard.FlinkJob),
+		SQLStatements:   make(map[string]*dashboard.FlinkStatement),
+		ClusterMetrics:  &dashboard.FlinkClusterMetrics{},
+		CheckpointStats: &dashboard.CheckpointStats{},
+	}
+	
+	// Process each SQL file
+	for i, sqlFile := range sqlFiles {
+		content, err := os.ReadFile(sqlFile)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Could not read SQL file %s: %v\n", sqlFile, err)
+			continue
+		}
+		
+		// Extract name from filename (remove extension and path)
+		baseName := filepath.Base(sqlFile)
+		name := baseName[:len(baseName)-4] // Remove .sql extension
+		
+		// Create FlinkStatement for display
+		stmt := &dashboard.FlinkStatement{
+			ID:               fmt.Sprintf("stmt-%d", i+1),
+			Name:             name,
+			Order:            i + 1,
+			Status:           "PENDING",
+			Phase:            "READY",
+			Content:          string(content),
+			ProcessedContent: string(content),
+			FilePath:         sqlFile,
+			DeploymentID:     "",
+			RecordsProcessed: 0,
+			RecordsPerSec:    0,
+			Parallelism:      1,
+			Dependencies:     []string{},
+			Variables:        make(map[string]string),
+		}
+		
+		flinkMetrics.SQLStatements[stmt.ID] = stmt
+	}
+	
+	// Update the dashboard with loaded SQL statements
+	metricsCollector := dashboardServer.GetMetricsCollector()
+	metricsCollector.SetFlinkMetrics(flinkMetrics)
+	
+	fmt.Printf("📖 Loaded %d SQL statements for dashboard display\n", len(sqlFiles))
+	return nil
 }
 
 // isCommandAvailable checks if a command is available in PATH
