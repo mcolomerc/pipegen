@@ -136,7 +136,7 @@ func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) 
 	if err != nil {
 		return fmt.Errorf("failed to connect to Kafka: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	for _, topic := range topics {
 		fmt.Printf("📝 Creating Kafka topic: %s\n", topic)
@@ -206,7 +206,7 @@ func (d *StackDeployer) registerSchema(client *http.Client, subject string, sche
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("schema registration failed with status %d", resp.StatusCode)
@@ -273,13 +273,13 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *pipeline
 	}
 
 	// Submit job via Flink SQL Gateway (port 8083)
-	url := fmt.Sprintf("http://localhost:8083/v1/sessions/default/statements")
+	url := "http://localhost:8083/v1/sessions/default/statements"
 	resp, err := client.Post(url, "application/json", strings.NewReader(string(payloadBytes)))
 	if err != nil {
 		// Fallback: try REST API if SQL Gateway is not available
 		return d.deployViaRESTAPI(client, stmt)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("FlinkSQL deployment failed with status %d", resp.StatusCode)

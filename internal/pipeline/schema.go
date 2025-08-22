@@ -286,11 +286,11 @@ type SchemaReference struct {
 // GenerateJavaClass generates Java POJO classes from AVRO schemas
 func (schema *Schema) GenerateJavaClass() (string, error) {
 	// TODO: Implement Java class generation from AVRO schema
-	return "", fmt.Errorf("Java class generation not implemented")
+	return "", fmt.Errorf("java class generation not implemented")
 }
 
 // GeneratePythonClass generates Python dataclasses from AVRO schemas
 func (schema *Schema) GeneratePythonClass() (string, error) {
 	// TODO: Implement Python class generation from AVRO schema
-	return "", fmt.Errorf("Python class generation not implemented")
+	return "", fmt.Errorf("python class generation not implemented")
 }

@@ -68,7 +68,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Check if Docker is running
 	if err := checkDockerRunning(); err != nil {
-		return fmt.Errorf("Docker is not running or not accessible: %w", err)
+		return fmt.Errorf("docker is not running or not accessible: %w", err)
 	}
 
 	// Clean existing containers if requested
@@ -163,11 +163,11 @@ func dockerComposeDown(projectDir string) error {
 		// If compose fails, try to remove containers by name
 		containerNames := []string{"pipegen-kafka", "pipegen-flink-jobmanager", "pipegen-flink-taskmanager", "pipegen-schema-registry"}
 		for _, name := range containerNames {
-			stopCmd := exec.Command("docker", "stop", name)
-			stopCmd.Run() // Ignore errors
-			rmCmd := exec.Command("docker", "rm", name)
-			rmCmd.Run() // Ignore errors
-		}
+		stopCmd := exec.Command("docker", "stop", name)
+		_ = stopCmd.Run() // Ignore errors
+		rmCmd := exec.Command("docker", "rm", name)
+		_ = rmCmd.Run() // Ignore errors
+	}
 	}
 	return nil
 }

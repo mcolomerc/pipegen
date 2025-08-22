@@ -147,7 +147,7 @@ func (g *ProjectGenerator) copyInputSchema(schemasDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open input schema: %w", err)
 	}
-	defer inputFile.Close()
+	defer func() { _ = inputFile.Close() }()
 
 	// Copy to input_event.avsc
 	outputPath := filepath.Join(schemasDir, "input_event.avsc")
@@ -155,7 +155,7 @@ func (g *ProjectGenerator) copyInputSchema(schemasDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create input schema file: %w", err)
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	_, err = io.Copy(outputFile, inputFile)
 	if err != nil {
@@ -295,7 +295,7 @@ func (g *ProjectGenerator) generateFlinkConfig() error {
 func (g *ProjectGenerator) generateREADME() error {
 	templateData := templates.TemplateData{
 		ProjectName:      g.ProjectName,
-		ProjectNameTitle: strings.Title(strings.ReplaceAll(g.ProjectName, "-", " ")),
+		ProjectNameTitle: toTitle(strings.ReplaceAll(g.ProjectName, "-", " ")),
 		SanitizedName:    templates.SanitizeAVROIdentifier(g.ProjectName),
 	}
 
@@ -313,4 +313,18 @@ func (g *ProjectGenerator) generateREADME() error {
 // Helper function to write content to file
 func writeFile(filePath, content string) error {
 	return os.WriteFile(filePath, []byte(content), 0644)
+}
+
+// toTitle capitalizes the first letter of each word, replacing deprecated strings.Title
+func toTitle(s string) string {
+	if s == "" {
+		return s
+	}
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
+		}
+	}
+	return strings.Join(words, " ")
 }

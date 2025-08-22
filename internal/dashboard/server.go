@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -325,7 +326,7 @@ func (ds *DashboardServer) Stop(ctx context.Context) error {
 	// Close all WebSocket connections
 	ds.clientsMutex.Lock()
 	for client := range ds.clients {
-		client.Close()
+		_ = client.Close()
 	}
 	ds.clientsMutex.Unlock()
 
@@ -400,7 +401,7 @@ func (ds *DashboardServer) calculateExecutionSummary(status *PipelineStatus) {
 	var totalMessages int64
 	var totalBytes int64
 	var avgThroughput float64
-	var successRate float64 = 100.0
+	var successRate = 100.0
 	var avgLatency time.Duration
 
 	if status.ProducerMetrics != nil {
@@ -452,7 +453,10 @@ func (ds *DashboardServer) handleStatus(w http.ResponseWriter, r *http.Request) 
 	ds.statusMutex.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		http.Error(w, "Failed to encode status", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleMetrics returns detailed metrics as JSON
@@ -460,7 +464,10 @@ func (ds *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request)
 	metrics := ds.metricsCollector.GetAllMetrics()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(metrics)
+	if err := json.NewEncoder(w).Encode(metrics); err != nil {
+		http.Error(w, "Failed to encode metrics", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleErrors returns error list as JSON
@@ -470,7 +477,10 @@ func (ds *DashboardServer) handleErrors(w http.ResponseWriter, r *http.Request) 
 	ds.statusMutex.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(errors)
+	if err := json.NewEncoder(w).Encode(errors); err != nil {
+		http.Error(w, "Failed to encode errors", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleExport generates and returns HTML report
@@ -488,7 +498,10 @@ func (ds *DashboardServer) handleExport(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"pipeline-report-%d.html\"",
 		time.Now().Unix()))
-	w.Write([]byte(report))
+	if _, err := w.Write([]byte(report)); err != nil {
+		log.Printf("Failed to write report: %v", err)
+		return
+	}
 }
 
 // handleWebSocket handles WebSocket connections for real-time updates
@@ -498,7 +511,11 @@ func (ds *DashboardServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 		fmt.Printf("WebSocket upgrade failed: %v\n", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Printf("Failed to close WebSocket connection: %v", err)
+		}
+	}()
 
 	ds.clientsMutex.Lock()
 	ds.clients[conn] = true
@@ -508,7 +525,11 @@ func (ds *DashboardServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 
 	// Send initial status
 	ds.statusMutex.RLock()
-	conn.WriteJSON(ds.pipelineStatus)
+	if err := conn.WriteJSON(ds.pipelineStatus); err != nil {
+		log.Printf("Failed to send initial status via WebSocket: %v", err)
+		ds.statusMutex.RUnlock()
+		return
+	}
 	ds.statusMutex.RUnlock()
 
 	// Keep connection alive and handle disconnections
@@ -546,7 +567,7 @@ func (ds *DashboardServer) broadcastLoop(ctx context.Context) {
 					ds.clientsMutex.RUnlock()
 					ds.clientsMutex.Lock()
 					delete(ds.clients, client)
-					client.Close()
+					_ = client.Close()
 					ds.clientsMutex.Unlock()
 					ds.clientsMutex.RLock()
 				}
@@ -585,7 +606,10 @@ func (ds *DashboardServer) handleDashboard(w http.ResponseWriter, r *http.Reques
 	}
 	ds.statusMutex.RUnlock()
 
-	tmpl.Execute(w, data)
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleReport serves the detailed report page
@@ -601,7 +625,10 @@ func (ds *DashboardServer) handleReport(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(report))
+	if _, err := w.Write([]byte(report)); err != nil {
+		log.Printf("Failed to write report: %v", err)
+		return
+	}
 }
 
 // handleDiagram serves the pipeline diagram page
@@ -634,5 +661,8 @@ func (ds *DashboardServer) handleDiagram(w http.ResponseWriter, r *http.Request)
 	}
 	ds.statusMutex.RUnlock()
 
-	tmpl.Execute(w, data)
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
+		return
+	}
 }

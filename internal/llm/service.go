@@ -186,10 +186,10 @@ func (s *LLMService) callOllama(ctx context.Context, prompt string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("failed to call Ollama API: %w. Make sure Ollama is running at %s", err, s.baseURL)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Ollama API returned status %d. Is the model '%s' installed? Run: ollama pull %s", resp.StatusCode, s.model, s.model)
+		return "", fmt.Errorf("ollama API returned status %d. Is the model '%s' installed? Run: ollama pull %s", resp.StatusCode, s.model, s.model)
 	}
 
 	var ollamaResp OllamaResponse

@@ -89,7 +89,7 @@ func (w *ServiceWaiter) checkHTTP(url string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode >= 200 && resp.StatusCode < 400, nil
 }
@@ -100,7 +100,7 @@ func (w *ServiceWaiter) checkKafka(address string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// For a more thorough check, we could try to create a Kafka admin client
 	// and list topics, but a simple TCP connection is sufficient for startup
@@ -113,6 +113,6 @@ func (w *ServiceWaiter) checkTCP(address string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	return true, nil
 }

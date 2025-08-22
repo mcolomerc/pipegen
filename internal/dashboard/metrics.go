@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -104,7 +104,7 @@ func (mc *MetricsCollector) updateKafkaMetrics() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Kafka: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Get cluster metadata
 	partitions, err := conn.ReadPartitions()
@@ -179,13 +179,13 @@ func (mc *MetricsCollector) updateFlinkMetrics() error {
 	if err != nil {
 		return fmt.Errorf("failed to get Flink overview: %w", err)
 	}
-	defer overviewResp.Body.Close()
+	defer func() { _ = overviewResp.Body.Close() }()
 
 	if overviewResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Flink API returned status %d", overviewResp.StatusCode)
+		return fmt.Errorf("flink API returned status %d", overviewResp.StatusCode)
 	}
 
-	overviewBody, err := ioutil.ReadAll(overviewResp.Body)
+	overviewBody, err := io.ReadAll(overviewResp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read overview response: %w", err)
 	}
@@ -217,10 +217,10 @@ func (mc *MetricsCollector) updateFlinkMetrics() error {
 		fmt.Printf("⚠️  Failed to get Flink jobs: %v\n", err)
 		return nil // Don't fail completely
 	}
-	defer jobsResp.Body.Close()
+	defer func() { _ = jobsResp.Body.Close() }()
 
 	if jobsResp.StatusCode == http.StatusOK {
-		jobsBody, err := ioutil.ReadAll(jobsResp.Body)
+		jobsBody, err := io.ReadAll(jobsResp.Body)
 		if err == nil {
 			var jobsResponse struct {
 				Jobs []struct {
@@ -271,13 +271,13 @@ func (mc *MetricsCollector) updateFlinkJobMetrics(jobID string, job *FlinkJob) {
 	if err != nil {
 		return
 	}
-	defer detailsResp.Body.Close()
+	defer func() { _ = detailsResp.Body.Close() }()
 
 	if detailsResp.StatusCode != http.StatusOK {
 		return
 	}
 
-	detailsBody, err := ioutil.ReadAll(detailsResp.Body)
+	detailsBody, err := io.ReadAll(detailsResp.Body)
 	if err != nil {
 		return
 	}

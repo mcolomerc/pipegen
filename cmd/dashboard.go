@@ -90,6 +90,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	// Override with config file if provided
 	if configFile != "" {
 		// TODO: Load config from file when pipeline.LoadConfig is available
+		fmt.Printf("Config file specified: %s (not yet implemented)\n", configFile)
 	}
 
 	// Create dashboard server

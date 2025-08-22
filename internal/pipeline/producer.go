@@ -197,7 +197,7 @@ func (p *Producer) randomEventType() string {
 // Close gracefully shuts down the producer
 func (p *Producer) Close() {
 	if p.writer != nil {
-		p.writer.Close()
+		_ = p.writer.Close()
 	}
 }
 

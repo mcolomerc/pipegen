@@ -35,12 +35,12 @@ func (s *LLMService) CheckOllamaConnection(ctx context.Context) error {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("Ollama is not running at %s. Start it with: ollama serve", s.baseURL)
+		return fmt.Errorf("ollama is not running at %s. Start it with: ollama serve", s.baseURL)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Ollama server returned status %d", resp.StatusCode)
+		return fmt.Errorf("ollama server returned status %d", resp.StatusCode)
 	}
 
 	// Check if the model is installed

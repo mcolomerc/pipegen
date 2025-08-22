@@ -40,7 +40,9 @@ func (c *Consumer) Start(ctx context.Context, topic string) error {
 	fmt.Printf("👂 Starting consumer for topic: %s\n", topic)
 
 	// Configure reader for the specific topic
-	c.reader.SetOffset(kafka.FirstOffset)
+	if err := c.reader.SetOffset(kafka.FirstOffset); err != nil {
+		return fmt.Errorf("failed to set offset: %w", err)
+	}
 
 	messageCount := 0
 	errorCount := 0
@@ -144,27 +146,6 @@ func (c *Consumer) validateMessage(msg *kafka.Message) error {
 	return nil
 }
 
-// decodeMessage decodes an AVRO-encoded message
-func (c *Consumer) decodeMessage(data []byte) (map[string]interface{}, error) {
-	if c.codec == nil {
-		return nil, fmt.Errorf("AVRO codec not initialized")
-	}
-
-	// Decode AVRO binary data
-	decoded, _, err := c.codec.NativeFromBinary(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode AVRO message: %w", err)
-	}
-
-	// Convert to map
-	result, ok := decoded.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("decoded message is not a map")
-	}
-
-	return result, nil
-}
-
 // SetSchema configures the AVRO codec for message decoding
 func (c *Consumer) SetSchema(schemaContent string) error {
 	codec, err := goavro.NewCodec(schemaContent)
@@ -178,7 +159,7 @@ func (c *Consumer) SetSchema(schemaContent string) error {
 // Close gracefully shuts down the consumer
 func (c *Consumer) Close() {
 	if c.reader != nil {
-		c.reader.Close()
+		_ = c.reader.Close()
 	}
 }
 

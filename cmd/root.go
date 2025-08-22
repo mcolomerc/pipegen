@@ -40,10 +40,10 @@ func init() {
 	rootCmd.PersistentFlags().String("schema-registry-url", "http://localhost:8082", "Schema Registry URL")
 	rootCmd.PersistentFlags().Bool("local-mode", true, "Use local Docker stack (no authentication)")
 
-	viper.BindPFlag("bootstrap_servers", rootCmd.PersistentFlags().Lookup("bootstrap-servers"))
-	viper.BindPFlag("flink_url", rootCmd.PersistentFlags().Lookup("flink-url"))
-	viper.BindPFlag("schema_registry_url", rootCmd.PersistentFlags().Lookup("schema-registry-url"))
-	viper.BindPFlag("local_mode", rootCmd.PersistentFlags().Lookup("local-mode"))
+	_ = viper.BindPFlag("bootstrap_servers", rootCmd.PersistentFlags().Lookup("bootstrap-servers"))
+	_ = viper.BindPFlag("flink_url", rootCmd.PersistentFlags().Lookup("flink-url"))
+	_ = viper.BindPFlag("schema_registry_url", rootCmd.PersistentFlags().Lookup("schema-registry-url"))
+	_ = viper.BindPFlag("local_mode", rootCmd.PersistentFlags().Lookup("local-mode"))
 
 	// Set defaults for local mode
 	viper.SetDefault("local_mode", true)
