@@ -1,0 +1,31 @@
+# PipeGen Configuration for Local Development
+# Local development mode
+local_mode: true
+
+# Kafka Configuration (local)
+bootstrap_servers: "localhost:9092"
+
+# FlinkSQL Configuration (local)  
+flink_url: "http://localhost:8081"
+
+# Schema Registry Configuration (local)
+schema_registry_url: "http://localhost:8082"
+
+# Pipeline Configuration
+default_message_rate: 100
+default_duration: "5m"
+topic_prefix: "{{.ProjectName}}"
+cleanup_on_exit: true
+
+# For Cloud/Confluent deployment, uncomment and configure:
+# local_mode: false
+# bootstrap_servers: "your-bootstrap-server.confluent.cloud:9092"
+# api_key: "YOUR_API_KEY"
+# api_secret: "YOUR_API_SECRET"
+# schema_registry_url: "https://your-schema-registry.confluent.cloud"
+# schema_registry_key: "YOUR_SCHEMA_REGISTRY_KEY"
+# schema_registry_secret: "YOUR_SCHEMA_REGISTRY_SECRET"
+# flink_api_key: "YOUR_FLINK_API_KEY"
+# flink_api_secret: "YOUR_FLINK_API_SECRET"
+# flink_environment: "YOUR_FLINK_ENVIRONMENT_ID"
+# flink_compute_pool: "YOUR_FLINK_COMPUTE_POOL_ID"
