@@ -35,7 +35,7 @@ func NewLLMService() *LLMService {
 		if model == "" {
 			model = "llama3.1" // Default Ollama model
 		}
-		
+
 		return &LLMService{
 			provider: ProviderOllama,
 			model:    model,
@@ -43,14 +43,14 @@ func NewLLMService() *LLMService {
 			enabled:  true,
 		}
 	}
-	
+
 	// Default to localhost Ollama if no URL specified
 	if _, exists := os.LookupEnv("PIPEGEN_OLLAMA_MODEL"); exists {
 		model := os.Getenv("PIPEGEN_OLLAMA_MODEL")
 		if model == "" {
 			model = "llama3.1"
 		}
-		
+
 		return &LLMService{
 			provider: ProviderOllama,
 			model:    model,
@@ -58,7 +58,7 @@ func NewLLMService() *LLMService {
 			enabled:  true,
 		}
 	}
-	
+
 	// Fall back to OpenAI
 	apiKey := os.Getenv("PIPEGEN_OPENAI_API_KEY")
 	if apiKey == "" {
@@ -86,11 +86,11 @@ func (s *LLMService) GetProvider() LLMProvider {
 
 // GeneratedContent represents LLM-generated pipeline components
 type GeneratedContent struct {
-	InputSchema    string            `json:"input_schema"`
-	OutputSchema   string            `json:"output_schema"`
-	SQLStatements  map[string]string `json:"sql_statements"`
-	Description    string            `json:"description"`
-	Optimizations  []string          `json:"optimizations"`
+	InputSchema   string            `json:"input_schema"`
+	OutputSchema  string            `json:"output_schema"`
+	SQLStatements map[string]string `json:"sql_statements"`
+	Description   string            `json:"description"`
+	Optimizations []string          `json:"optimizations"`
 }
 
 // GeneratePipeline creates pipeline components from natural language description
@@ -100,10 +100,10 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
 	}
 
 	prompt := buildPrompt(description, domain)
-	
+
 	var response string
 	var err error
-	
+
 	switch s.provider {
 	case ProviderOllama:
 		response, err = s.callOllama(ctx, prompt)
@@ -112,7 +112,7 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", s.provider)
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("LLM generation failed: %w", err)
 	}
@@ -168,35 +168,35 @@ func (s *LLMService) callOllama(ctx context.Context, prompt string) (string, err
 		Prompt: prompt,
 		Stream: false,
 	}
-	
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/api/generate", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to call Ollama API: %w. Make sure Ollama is running at %s", err, s.baseURL)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("Ollama API returned status %d. Is the model '%s' installed? Run: ollama pull %s", resp.StatusCode, s.model, s.model)
 	}
-	
+
 	var ollamaResp OllamaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
 		return "", fmt.Errorf("failed to decode Ollama response: %w", err)
 	}
-	
+
 	return ollamaResp.Response, nil
 }
 
@@ -204,7 +204,7 @@ func (s *LLMService) callOpenAI(ctx context.Context, prompt string) (string, err
 	// Implementation for OpenAI API call
 	// This would use the official OpenAI Go client
 	// For now, returning mock response for structure
-	
+
 	mockResponse := `{
 		"input_schema": "{\"type\":\"record\",\"name\":\"UserEvent\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"event_type\",\"type\":\"string\"},{\"name\":\"timestamp\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}}]}",
 		"output_schema": "{\"type\":\"record\",\"name\":\"UserMetrics\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"event_count\",\"type\":\"long\"},{\"name\":\"window_start\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}}]}",
@@ -217,7 +217,7 @@ func (s *LLMService) callOpenAI(ctx context.Context, prompt string) (string, err
 		"description": "Real-time user activity aggregation pipeline that processes user events and calculates per-minute activity counts",
 		"optimizations": ["Consider partitioning by user_id for better parallelism", "Add watermark handling for late events", "Consider using HOP windows for overlapping metrics"]
 	}`
-	
+
 	return mockResponse, nil
 }
 

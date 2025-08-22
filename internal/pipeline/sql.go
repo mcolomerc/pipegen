@@ -31,7 +31,7 @@ func NewSQLLoader(projectDir string) *SQLLoader {
 // LoadStatements loads all SQL statements from the sql/ directory
 func (loader *SQLLoader) LoadStatements() ([]*SQLStatement, error) {
 	sqlDir := filepath.Join(loader.projectDir, "sql")
-	
+
 	// Check if sql directory exists
 	if _, err := os.Stat(sqlDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("sql directory not found: %s", sqlDir)
@@ -115,7 +115,7 @@ func (loader *SQLLoader) cleanSQL(sql string) string {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Skip empty lines and single-line comments
 		if line == "" || strings.HasPrefix(line, "--") {
 			continue
@@ -143,7 +143,7 @@ func (loader *SQLLoader) ValidateStatement(statement *SQLStatement) error {
 		"DROP DATABASE",
 		"DROP SCHEMA",
 		"TRUNCATE",
-		"DELETE FROM", 
+		"DELETE FROM",
 	}
 
 	for _, op := range dangerousOperations {
@@ -153,9 +153,9 @@ func (loader *SQLLoader) ValidateStatement(statement *SQLStatement) error {
 	}
 
 	// Check for required FlinkSQL keywords
-	if !strings.Contains(sql, "CREATE TABLE") && 
-	   !strings.Contains(sql, "INSERT INTO") && 
-	   !strings.Contains(sql, "SELECT") {
+	if !strings.Contains(sql, "CREATE TABLE") &&
+		!strings.Contains(sql, "INSERT INTO") &&
+		!strings.Contains(sql, "SELECT") {
 		return fmt.Errorf("statement must contain CREATE TABLE, INSERT INTO, or SELECT")
 	}
 

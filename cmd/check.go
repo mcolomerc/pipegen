@@ -28,9 +28,9 @@ func init() {
 
 func runCheck(cmd *cobra.Command, args []string) error {
 	fmt.Println("🔍 Checking AI provider configuration...")
-	
+
 	llmService := llm.NewLLMService()
-	
+
 	if !llmService.IsEnabled() {
 		fmt.Println("❌ No AI provider configured")
 		fmt.Println("\n💡 To enable AI features, choose one:")
@@ -43,22 +43,22 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		fmt.Println("     2. Set: export PIPEGEN_OPENAI_API_KEY=your-key")
 		return nil
 	}
-	
+
 	fmt.Printf("✅ AI provider detected: %s\n", llmService.GetProviderInfo())
-	
+
 	// Test connectivity
 	fmt.Println("🔗 Testing connectivity...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	if err := llmService.CheckOllamaConnection(ctx); err != nil {
 		fmt.Printf("❌ Connection failed: %v\n", err)
 		return nil
 	}
-	
+
 	fmt.Println("✅ AI provider is ready!")
 	fmt.Println("\n💡 Try generating a pipeline:")
 	fmt.Println("   pipegen init my-pipeline --describe \"your pipeline description\"")
-	
+
 	return nil
 }

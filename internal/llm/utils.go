@@ -24,31 +24,31 @@ func (s *LLMService) CheckOllamaConnection(ctx context.Context) error {
 	if s.provider != ProviderOllama {
 		return nil
 	}
-	
+
 	// Check if Ollama server is running
 	client := &http.Client{Timeout: 5 * time.Second}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/api/tags", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("Ollama is not running at %s. Start it with: ollama serve", s.baseURL)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Ollama server returned status %d", resp.StatusCode)
 	}
-	
+
 	// Check if the model is installed
 	var modelsResp OllamaModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		return fmt.Errorf("failed to decode models response: %w", err)
 	}
-	
+
 	modelFound := false
 	for _, model := range modelsResp.Models {
 		if model.Name == s.model || model.Name == s.model+":latest" {
@@ -56,11 +56,11 @@ func (s *LLMService) CheckOllamaConnection(ctx context.Context) error {
 			break
 		}
 	}
-	
+
 	if !modelFound {
 		return fmt.Errorf("model '%s' is not installed. Install it with: ollama pull %s", s.model, s.model)
 	}
-	
+
 	return nil
 }
 
@@ -69,7 +69,7 @@ func (s *LLMService) GetProviderInfo() string {
 	if !s.enabled {
 		return "No AI provider configured"
 	}
-	
+
 	switch s.provider {
 	case ProviderOllama:
 		return fmt.Sprintf("Ollama (local) - Model: %s, URL: %s", s.model, s.baseURL)

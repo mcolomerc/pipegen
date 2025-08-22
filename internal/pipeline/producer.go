@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/segmentio/kafka-go"
 	"github.com/linkedin/goavro/v2"
+	"github.com/segmentio/kafka-go"
 )
 
 // Producer handles Kafka message production with AVRO encoding
@@ -113,7 +113,7 @@ func (p *Producer) generateDynamicMessage(messageID int) (map[string]interface{}
 	// Generate values for each field based on field name patterns
 	// This approach works with any schema by detecting common field name patterns
 	fieldNames := []string{
-		"event_id", "session_id", "user_id", "page_url", "click_type", 
+		"event_id", "session_id", "user_id", "page_url", "click_type",
 		"event_type", "timestamp", "timestamp_col", "properties", "metadata",
 	}
 
@@ -135,9 +135,9 @@ func (p *Producer) generateDynamicMessage(messageID int) (map[string]interface{}
 			message[fieldName] = now
 		case "properties", "metadata":
 			message[fieldName] = map[string]interface{}{
-				"source":    "pipegen",
-				"version":   "1.0",
-				"session":   fmt.Sprintf("session-%d", rand.Intn(100)),
+				"source":  "pipegen",
+				"version": "1.0",
+				"session": fmt.Sprintf("session-%d", rand.Intn(100)),
 			}
 		}
 	}
@@ -183,7 +183,7 @@ func (p *Producer) randomClickType() string {
 func (p *Producer) randomEventType() string {
 	eventTypes := []string{
 		"page_view",
-		"button_click", 
+		"button_click",
 		"form_submit",
 		"purchase",
 		"add_to_cart",
@@ -203,11 +203,11 @@ func (p *Producer) Close() {
 
 // ProducerStats holds producer statistics
 type ProducerStats struct {
-	MessagesSent     int64     `json:"messages_sent"`
-	MessagesPerSec   float64   `json:"messages_per_sec"`
-	BytesSent        int64     `json:"bytes_sent"`
-	ErrorCount       int64     `json:"error_count"`
-	LastMessageTime  time.Time `json:"last_message_time"`
+	MessagesSent    int64     `json:"messages_sent"`
+	MessagesPerSec  float64   `json:"messages_per_sec"`
+	BytesSent       int64     `json:"bytes_sent"`
+	ErrorCount      int64     `json:"error_count"`
+	LastMessageTime time.Time `json:"last_message_time"`
 }
 
 // GetStats returns current producer statistics

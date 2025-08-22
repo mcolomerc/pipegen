@@ -16,9 +16,9 @@ import (
 
 // StackDeployer handles deployment operations for the local stack
 type StackDeployer struct {
-	projectDir        string
-	kafkaAddr         string
-	flinkAddr         string
+	projectDir         string
+	kafkaAddr          string
+	flinkAddr          string
 	schemaRegistryAddr string
 }
 
@@ -26,8 +26,8 @@ type StackDeployer struct {
 func NewStackDeployer(projectDir string) *StackDeployer {
 	return &StackDeployer{
 		projectDir:         projectDir,
-		kafkaAddr:         "localhost:9092",
-		flinkAddr:         "http://localhost:8081",
+		kafkaAddr:          "localhost:9092",
+		flinkAddr:          "http://localhost:8081",
 		schemaRegistryAddr: "http://localhost:8082",
 	}
 }
@@ -49,7 +49,7 @@ func (d *StackDeployer) SetupTopicsAndSchemas(ctx context.Context, withSchemaReg
 
 	// Extract topic names from SQL statements
 	topics := d.extractTopicNames(statements)
-	
+
 	// Create Kafka topics
 	if err := d.createKafkaTopics(ctx, topics); err != nil {
 		return fmt.Errorf("failed to create Kafka topics: %w", err)
@@ -79,11 +79,11 @@ func (d *StackDeployer) DeployFlinkJobs(ctx context.Context) error {
 	// Deploy each statement via Flink SQL Gateway
 	for _, stmt := range processedStatements {
 		fmt.Printf("📝 Deploying FlinkSQL job: %s\n", stmt.Name)
-		
+
 		if err := d.deployFlinkStatement(ctx, stmt); err != nil {
 			return fmt.Errorf("failed to deploy statement %s: %w", stmt.Name, err)
 		}
-		
+
 		fmt.Printf("  ✅ Deployed: %s\n", stmt.Name)
 	}
 
@@ -93,15 +93,15 @@ func (d *StackDeployer) DeployFlinkJobs(ctx context.Context) error {
 // extractTopicNames extracts topic names from SQL statements
 func (d *StackDeployer) extractTopicNames(statements []*pipeline.SQLStatement) []string {
 	topics := make(map[string]bool)
-	
+
 	// Default topics for the pipeline
 	topics["input-events"] = true
 	topics["output-results"] = true
-	
+
 	// Extract topics from SQL statements
 	for _, stmt := range statements {
 		content := strings.ToUpper(stmt.Content)
-		
+
 		// Look for topic references in WITH clauses
 		if strings.Contains(content, "'TOPIC'") {
 			// This is a simplified extraction - in production, you'd want
@@ -109,7 +109,7 @@ func (d *StackDeployer) extractTopicNames(statements []*pipeline.SQLStatement) [
 			lines := strings.Split(stmt.Content, "\n")
 			for _, line := range lines {
 				if strings.Contains(strings.ToUpper(line), "'TOPIC'") &&
-				   strings.Contains(line, "=") {
+					strings.Contains(line, "=") {
 					parts := strings.Split(line, "=")
 					if len(parts) > 1 {
 						topic := strings.Trim(parts[1], " '\"(),")
@@ -121,12 +121,12 @@ func (d *StackDeployer) extractTopicNames(statements []*pipeline.SQLStatement) [
 			}
 		}
 	}
-	
+
 	result := make([]string, 0, len(topics))
 	for topic := range topics {
 		result = append(result, topic)
 	}
-	
+
 	return result
 }
 
@@ -140,17 +140,17 @@ func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) 
 
 	for _, topic := range topics {
 		fmt.Printf("📝 Creating Kafka topic: %s\n", topic)
-		
+
 		err := conn.CreateTopics(kafka.TopicConfig{
 			Topic:             topic,
 			NumPartitions:     3,
 			ReplicationFactor: 1,
 		})
-		
+
 		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return fmt.Errorf("failed to create topic %s: %w", topic, err)
 		}
-		
+
 		fmt.Printf("  ✅ Topic created: %s\n", topic)
 	}
 
@@ -164,11 +164,11 @@ func (d *StackDeployer) registerSchemas(ctx context.Context, schemas map[string]
 	for name, schema := range schemas {
 		subject := d.getSchemaSubject(name, topics)
 		fmt.Printf("📋 Registering schema: %s -> %s\n", name, subject)
-		
+
 		if err := d.registerSchema(client, subject, schema); err != nil {
 			return fmt.Errorf("failed to register schema %s: %w", name, err)
 		}
-		
+
 		fmt.Printf("  ✅ Schema registered: %s\n", subject)
 	}
 
@@ -218,35 +218,35 @@ func (d *StackDeployer) registerSchema(client *http.Client, subject string, sche
 // processStatementsForLocal processes SQL statements for local deployment
 func (d *StackDeployer) processStatementsForLocal(statements []*pipeline.SQLStatement) []*pipeline.SQLStatement {
 	processed := make([]*pipeline.SQLStatement, len(statements))
-	
+
 	for i, stmt := range statements {
 		content := stmt.Content
-		
+
 		// Replace variables with local values
 		replacements := map[string]string{
-			"${INPUT_TOPIC}":               "input-events",
-			"${OUTPUT_TOPIC}":              "output-results", 
-			"${BOOTSTRAP_SERVERS}":         "kafka:29092",
-			"${SCHEMA_REGISTRY_URL}":       "http://schema-registry:8082",
+			"${INPUT_TOPIC}":         "input-events",
+			"${OUTPUT_TOPIC}":        "output-results",
+			"${BOOTSTRAP_SERVERS}":   "kafka:29092",
+			"${SCHEMA_REGISTRY_URL}": "http://schema-registry:8082",
 		}
-		
+
 		for placeholder, value := range replacements {
 			content = strings.ReplaceAll(content, placeholder, value)
 		}
-		
+
 		// Remove authentication settings for local deployment
 		lines := strings.Split(content, "\n")
 		var cleanLines []string
-		
+
 		for _, line := range lines {
 			if strings.Contains(strings.ToUpper(line), "SASL") ||
-			   strings.Contains(strings.ToUpper(line), "SECURITY.PROTOCOL") ||
-			   strings.Contains(strings.ToUpper(line), "BASIC-AUTH") {
+				strings.Contains(strings.ToUpper(line), "SECURITY.PROTOCOL") ||
+				strings.Contains(strings.ToUpper(line), "BASIC-AUTH") {
 				continue
 			}
 			cleanLines = append(cleanLines, line)
 		}
-		
+
 		processed[i] = &pipeline.SQLStatement{
 			Name:     stmt.Name,
 			Content:  strings.Join(cleanLines, "\n"),
@@ -254,7 +254,7 @@ func (d *StackDeployer) processStatementsForLocal(statements []*pipeline.SQLStat
 			Order:    stmt.Order,
 		}
 	}
-	
+
 	return processed
 }
 
@@ -292,22 +292,22 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *pipeline
 func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *pipeline.SQLStatement) error {
 	// For now, we'll create a simple JAR file that contains the SQL statement
 	// In a production environment, you'd want to create a proper Flink job
-	
+
 	fmt.Printf("  ⚠️  SQL Gateway not available, using fallback method for: %s\n", stmt.Name)
-	
+
 	// Create a SQL file that can be executed later
 	sqlDir := filepath.Join(d.projectDir, "deployed-sql")
 	if err := os.MkdirAll(sqlDir, 0755); err != nil {
 		return fmt.Errorf("failed to create deployed-sql directory: %w", err)
 	}
-	
+
 	sqlFile := filepath.Join(sqlDir, fmt.Sprintf("%s.sql", stmt.Name))
 	if err := os.WriteFile(sqlFile, []byte(stmt.Content), 0644); err != nil {
 		return fmt.Errorf("failed to write SQL file: %w", err)
 	}
-	
+
 	fmt.Printf("  📄 SQL statement saved to: %s\n", sqlFile)
 	fmt.Printf("  💡 Manual execution: Use Flink SQL CLI or Web UI to execute this statement\n")
-	
+
 	return nil
 }

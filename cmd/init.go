@@ -105,8 +105,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 			Description:   generatedContent.Description,
 			Optimizations: generatedContent.Optimizations,
 		}
-		llmGen := generator.NewProjectGeneratorWithLLM(projectName, projectPath, localMode, llmContent)
-		
+		llmGen, err := generator.NewProjectGeneratorWithLLM(projectName, projectPath, localMode, llmContent)
+		if err != nil {
+			return fmt.Errorf("failed to create LLM generator: %w", err)
+		}
+
 		// Print optimizations
 		if len(generatedContent.Optimizations) > 0 {
 			fmt.Println("\n💡 AI Optimization Suggestions:")
@@ -127,7 +130,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 			fmt.Println("📋 Generating default input schema (use --input-schema to provide your own)")
 		}
 
-		gen := generator.NewProjectGenerator(projectName, projectPath, localMode)
+		gen, err := generator.NewProjectGenerator(projectName, projectPath, localMode)
+		if err != nil {
+			return fmt.Errorf("failed to create generator: %w", err)
+		}
 		if inputSchemaPath != "" {
 			gen.SetInputSchemaPath(inputSchemaPath)
 		}
@@ -140,7 +146,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✅ Project %s initialized successfully!\n", projectName)
 	fmt.Printf("📁 Project structure created at: %s\n", projectPath)
-	
+
 	// Print next steps
 	printNextSteps(projectName, localMode, description != "")
 
@@ -150,7 +156,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 func printNextSteps(projectName string, localMode bool, isAIGenerated bool) {
 	fmt.Println("\nNext steps:")
 	fmt.Printf("1. cd %s\n", projectName)
-	
+
 	if localMode {
 		fmt.Println("2. Review and customize the generated files:")
 		fmt.Println("   • docker-compose.yml - Docker stack configuration")
@@ -166,7 +172,7 @@ func printNextSteps(projectName string, localMode bool, isAIGenerated bool) {
 			fmt.Println("3. Deploy local stack: pipegen deploy")
 			fmt.Println("4. Run pipeline: pipegen run")
 		}
-		
+
 		if !isAIGenerated {
 			fmt.Println("\n💡 Try AI-powered generation:")
 			fmt.Println("   • Ollama (local): export PIPEGEN_OLLAMA_MODEL=llama3.1")

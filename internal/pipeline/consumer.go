@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/segmentio/kafka-go"
 	"github.com/linkedin/goavro/v2"
+	"github.com/segmentio/kafka-go"
 )
 
 // Consumer handles Kafka message consumption and validation
@@ -21,7 +21,7 @@ func NewConsumer(config *Config) (*Consumer, error) {
 	// For demo purposes, the consumer reads from the output-results topic
 	// to demonstrate that the pipeline is processing messages correctly
 	topicName := "output-results"
-	
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  []string{config.BootstrapServers},
 		Topic:    topicName,
@@ -41,7 +41,7 @@ func (c *Consumer) Start(ctx context.Context, topic string) error {
 
 	// Configure reader for the specific topic
 	c.reader.SetOffset(kafka.FirstOffset)
-	
+
 	messageCount := 0
 	errorCount := 0
 	lastLogTime := time.Now()
@@ -219,7 +219,7 @@ type DefaultValidator struct{}
 func (v *DefaultValidator) Validate(message map[string]interface{}) error {
 	// Check for required fields (example)
 	requiredFields := []string{"event_id", "user_id", "event_type", "timestamp_col"}
-	
+
 	for _, field := range requiredFields {
 		if _, exists := message[field]; !exists {
 			return fmt.Errorf("missing required field: %s", field)

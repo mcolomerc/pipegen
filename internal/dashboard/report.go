@@ -595,17 +595,17 @@ func GenerateHTMLReport(status *PipelineStatus) (string, error) {
 		},
 		"generatePipelineDiagram": generatePipelineDiagram,
 	}
-	
+
 	tmpl, err := template.New("report").Funcs(funcMap).Parse(reportTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-	
+
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, status); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-	
+
 	return buf.String(), nil
 }
 
@@ -637,7 +637,7 @@ Status: %s | Duration: %s | Messages Processed: %s`
 		producerRate = fmt.Sprintf("%.1f", status.ProducerMetrics.MessagesPerSec)
 		producerStatus = status.ProducerMetrics.Status
 	}
-	
+
 	partitions := "1"
 	kafkaHealth := "UNKNOWN"
 	if status.KafkaMetrics != nil && status.Resources != nil {
@@ -646,14 +646,14 @@ Status: %s | Duration: %s | Messages Processed: %s`
 			partitions = fmt.Sprintf("%d", topic.Partitions)
 		}
 	}
-	
+
 	flinkJobs := 0
 	flinkStatus := "STOPPED"
 	if status.FlinkMetrics != nil {
 		flinkJobs = len(status.FlinkMetrics.Jobs)
 		flinkStatus = status.FlinkMetrics.JobManagerStatus
 	}
-	
+
 	outputMessages := "0"
 	outputLag := "0"
 	if status.KafkaMetrics != nil && status.Resources != nil {
@@ -662,17 +662,17 @@ Status: %s | Duration: %s | Messages Processed: %s`
 			outputLag = fmt.Sprintf("%d", topic.Lag)
 		}
 	}
-	
+
 	schemaStatus := "UNKNOWN"
 	// Schema Registry status would be added here
-	
+
 	consumerRate := "0"
 	consumerStatus := "STOPPED"
 	if status.ConsumerMetrics != nil {
 		consumerRate = fmt.Sprintf("%.1f", status.ConsumerMetrics.MessagesPerSec)
 		consumerStatus = status.ConsumerMetrics.Status
 	}
-	
+
 	totalMessages := "0"
 	if status.ExecutionSummary != nil {
 		if status.ExecutionSummary.TotalMessagesProcessed >= 1_000_000 {
@@ -683,8 +683,8 @@ Status: %s | Duration: %s | Messages Processed: %s`
 			totalMessages = fmt.Sprintf("%d", status.ExecutionSummary.TotalMessagesProcessed)
 		}
 	}
-	
-	return fmt.Sprintf(diagram, 
+
+	return fmt.Sprintf(diagram,
 		producerRate, partitions, flinkJobs, outputMessages,
 		producerStatus, kafkaHealth, flinkStatus, outputLag,
 		schemaStatus, consumerRate, consumerStatus,

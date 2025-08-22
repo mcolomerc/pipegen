@@ -109,10 +109,10 @@ func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) 
 // substituteVariables replaces placeholders in SQL statements with actual values
 func (fd *FlinkDeployer) substituteVariables(sql string, resources *Resources) string {
 	replacements := map[string]string{
-		"${INPUT_TOPIC}":               resources.InputTopic,
-		"${OUTPUT_TOPIC}":              resources.OutputTopic,
-		"${BOOTSTRAP_SERVERS}":         fd.config.BootstrapServers,
-		"${SCHEMA_REGISTRY_URL}":      fd.config.SchemaRegistryURL,
+		"${INPUT_TOPIC}":         resources.InputTopic,
+		"${OUTPUT_TOPIC}":        resources.OutputTopic,
+		"${BOOTSTRAP_SERVERS}":   fd.config.BootstrapServers,
+		"${SCHEMA_REGISTRY_URL}": fd.config.SchemaRegistryURL,
 	}
 
 	processedSQL := sql

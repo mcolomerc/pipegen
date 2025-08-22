@@ -10,12 +10,12 @@ import (
 
 // Schema represents an AVRO schema
 type Schema struct {
-	Name        string                 `json:"name"`
-	Namespace   string                 `json:"namespace"`
-	Type        string                 `json:"type"`
-	Content     string                 `json:"-"` // Raw schema content
-	Fields      []SchemaField         `json:"fields,omitempty"`
-	FilePath    string                 `json:"-"`
+	Name      string        `json:"name"`
+	Namespace string        `json:"namespace"`
+	Type      string        `json:"type"`
+	Content   string        `json:"-"` // Raw schema content
+	Fields    []SchemaField `json:"fields,omitempty"`
+	FilePath  string        `json:"-"`
 }
 
 // SchemaField represents a field in an AVRO schema
@@ -40,7 +40,7 @@ func NewSchemaLoader(projectDir string) *SchemaLoader {
 // LoadSchemas loads all AVRO schemas from the schemas/ directory
 func (loader *SchemaLoader) LoadSchemas() (map[string]*Schema, error) {
 	schemaDir := filepath.Join(loader.projectDir, "schemas")
-	
+
 	// Check if schemas directory exists
 	if _, err := os.Stat(schemaDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("schemas directory not found: %s", schemaDir)
@@ -123,19 +123,19 @@ func (loader *SchemaLoader) loadSchema(filePath string) (*Schema, error) {
 		for _, fieldData := range fieldsData {
 			if fieldMap, ok := fieldData.(map[string]interface{}); ok {
 				field := SchemaField{}
-				
+
 				if name, ok := fieldMap["name"].(string); ok {
 					field.Name = name
 				}
-				
+
 				if fieldType, ok := fieldMap["type"]; ok {
 					field.Type = fieldType
 				}
-				
+
 				if doc, ok := fieldMap["doc"].(string); ok {
 					field.Doc = doc
 				}
-				
+
 				schema.Fields = append(schema.Fields, field)
 			}
 		}
@@ -176,7 +176,7 @@ func (loader *SchemaLoader) validateSchema(schema *Schema) error {
 			if field.Name == "" {
 				return fmt.Errorf("field must have a name")
 			}
-			
+
 			if fieldNames[field.Name] {
 				return fmt.Errorf("duplicate field name: %s", field.Name)
 			}
@@ -198,12 +198,12 @@ func (loader *SchemaLoader) getSchemaKey(filename string) string {
 	// Remove file extension
 	key := strings.TrimSuffix(filename, ".avsc")
 	key = strings.TrimSuffix(key, ".json")
-	
+
 	// Convert to consistent format
 	key = strings.ToLower(key)
 	key = strings.ReplaceAll(key, "_", "")
 	key = strings.ReplaceAll(key, "-", "")
-	
+
 	// Map common patterns to standard keys
 	if strings.Contains(key, "input") || strings.Contains(key, "event") {
 		return "input"
@@ -211,15 +211,15 @@ func (loader *SchemaLoader) getSchemaKey(filename string) string {
 	if strings.Contains(key, "output") || strings.Contains(key, "result") {
 		return "output"
 	}
-	
+
 	return key
 }
 
 // GetSchemaSubjects returns Schema Registry subjects for the schemas
 func (loader *SchemaLoader) GetSchemaSubjects(schemas map[string]*Schema, topicPrefix string) map[string]string {
 	subjects := make(map[string]string)
-	
-	for key, _ := range schemas {
+
+	for key := range schemas {
 		switch key {
 		case "input":
 			subjects[key] = fmt.Sprintf("%s-input-value", topicPrefix)
@@ -229,7 +229,7 @@ func (loader *SchemaLoader) GetSchemaSubjects(schemas map[string]*Schema, topicP
 			subjects[key] = fmt.Sprintf("%s-%s-value", topicPrefix, key)
 		}
 	}
-	
+
 	return subjects
 }
 
@@ -253,14 +253,14 @@ func NewSchemaRegistry(url, apiKey, apiSecret string) *SchemaRegistry {
 func (sr *SchemaRegistry) RegisterSchema(subject string, schema *Schema) (int, error) {
 	// TODO: Implement actual Schema Registry API call
 	// This is a placeholder for the actual implementation
-	
+
 	fmt.Printf("📋 Registering schema for subject: %s\n", subject)
-	
+
 	// Here you would use the Schema Registry HTTP API to:
 	// 1. Check compatibility with existing schemas
 	// 2. Register the new schema
 	// 3. Return the schema ID
-	
+
 	return 1, nil // Simulated schema ID
 }
 
@@ -289,7 +289,7 @@ func (schema *Schema) GenerateJavaClass() (string, error) {
 	return "", fmt.Errorf("Java class generation not implemented")
 }
 
-// GeneratePythonClass generates Python dataclasses from AVRO schemas  
+// GeneratePythonClass generates Python dataclasses from AVRO schemas
 func (schema *Schema) GeneratePythonClass() (string, error) {
 	// TODO: Implement Python class generation from AVRO schema
 	return "", fmt.Errorf("Python class generation not implemented")

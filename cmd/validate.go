@@ -87,7 +87,7 @@ func validateProjectStructure(projectDir string) error {
 
 func validateSQLFiles(projectDir string) error {
 	sqlDir := filepath.Join(projectDir, "sql")
-	
+
 	entries, err := os.ReadDir(sqlDir)
 	if err != nil {
 		return fmt.Errorf("failed to read sql directory: %w", err)
@@ -111,7 +111,7 @@ func validateSQLFiles(projectDir string) error {
 
 func validateAVROSchemas(projectDir string) error {
 	schemaDir := filepath.Join(projectDir, "schemas")
-	
+
 	entries, err := os.ReadDir(schemaDir)
 	if err != nil {
 		return fmt.Errorf("failed to read schemas directory: %w", err)

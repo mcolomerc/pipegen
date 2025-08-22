@@ -10,31 +10,31 @@ import (
 type Config struct {
 	ProjectDir        string
 	MessageRate       int
-	Duration         time.Duration
-	Cleanup          bool
-	DryRun           bool
-	BootstrapServers string
-	FlinkURL         string
+	Duration          time.Duration
+	Cleanup           bool
+	DryRun            bool
+	BootstrapServers  string
+	FlinkURL          string
 	SchemaRegistryURL string
-	LocalMode        bool
+	LocalMode         bool
 }
 
 // Runner orchestrates the complete pipeline execution
 type Runner struct {
-	config        *Config
-	resourceMgr   *ResourceManager
-	producer      *Producer
-	consumer      *Consumer
-	flinkDeployer *FlinkDeployer
-	sqlLoader     *SQLLoader
-	schemaLoader  *SchemaLoader
+	config          *Config
+	resourceMgr     *ResourceManager
+	producer        *Producer
+	consumer        *Consumer
+	flinkDeployer   *FlinkDeployer
+	sqlLoader       *SQLLoader
+	schemaLoader    *SchemaLoader
 	dashboardServer interface{} // Can be nil if no dashboard integration
 }
 
 // NewRunner creates a new pipeline runner
 func NewRunner(config *Config) (*Runner, error) {
 	resourceMgr := NewResourceManager(config)
-	
+
 	producer, err := NewProducer(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create producer: %w", err)
@@ -115,7 +115,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Step 6: Deploy FlinkSQL statements
 	fmt.Println("⚡ Deploying FlinkSQL statements...")
 	var deploymentIDs []string
-	
+
 	if r.dashboardServer != nil {
 		// Deploy with status tracking for dashboard integration
 		deploymentIDs, err = r.flinkDeployer.DeployWithStatusTracking(ctx, sqlStatements, resources, r.updateStatementStatus)
@@ -123,7 +123,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		// Deploy normally without status tracking
 		deploymentIDs, err = r.flinkDeployer.Deploy(ctx, sqlStatements, resources)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to deploy FlinkSQL: %w", err)
 	}
@@ -133,7 +133,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	fmt.Println("👂 Starting Kafka consumer...")
 	consumerCtx, cancelConsumer := context.WithCancel(ctx)
 	defer cancelConsumer()
-	
+
 	consumerDone := make(chan error, 1)
 	go func() {
 		consumerDone <- r.consumer.Start(consumerCtx, resources.OutputTopic)
@@ -151,7 +151,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// Step 9: Monitor execution
 	fmt.Printf("⏱️  Running pipeline for %v...\n", r.config.Duration)
-	
+
 	select {
 	case <-time.After(r.config.Duration):
 		fmt.Println("⏰ Pipeline duration reached")
@@ -201,11 +201,11 @@ func (r *Runner) cleanup(ctx context.Context, resources *Resources, deploymentID
 func (r *Runner) initializeSQLTracking(statements []*SQLStatement) {
 	// Create variables map for substitution
 	variables := map[string]string{
-		"${BOOTSTRAP_SERVERS}": r.config.BootstrapServers,
+		"${BOOTSTRAP_SERVERS}":   r.config.BootstrapServers,
 		"${SCHEMA_REGISTRY_URL}": r.config.SchemaRegistryURL,
-		"${FLINK_URL}": r.config.FlinkURL,
+		"${FLINK_URL}":           r.config.FlinkURL,
 	}
-	
+
 	// Use type assertion to access dashboard methods
 	if ds, ok := r.dashboardServer.(interface {
 		InitializeSQLStatements([]*SQLStatement, map[string]string)
@@ -219,7 +219,7 @@ func (r *Runner) updateStatementStatus(statementName, status, phase string, depl
 	if r.dashboardServer == nil {
 		return
 	}
-	
+
 	// Use type assertion to access dashboard methods
 	if ds, ok := r.dashboardServer.(interface {
 		UpdateStatementStatus(string, string, string, string, string)

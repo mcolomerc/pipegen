@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"pipegen/internal/pipeline"
 	"pipegen/internal/dashboard"
+	"pipegen/internal/pipeline"
 )
 
 var runCmd = &cobra.Command{
@@ -54,13 +54,13 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	config := &pipeline.Config{
 		ProjectDir:        projectDir,
 		MessageRate:       messageRate,
-		Duration:         duration,
-		Cleanup:          cleanup,
-		DryRun:           dryRun,
-		BootstrapServers: viper.GetString("bootstrap_servers"),
-		FlinkURL:         viper.GetString("flink_url"),
+		Duration:          duration,
+		Cleanup:           cleanup,
+		DryRun:            dryRun,
+		BootstrapServers:  viper.GetString("bootstrap_servers"),
+		FlinkURL:          viper.GetString("flink_url"),
 		SchemaRegistryURL: viper.GetString("schema_registry_url"),
-		LocalMode:        viper.GetBool("local_mode"),
+		LocalMode:         viper.GetBool("local_mode"),
 	}
 
 	if dryRun {
@@ -154,7 +154,7 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 
 	// Create dashboard server
 	dashboardServer := dashboard.NewDashboardServer(dashboardPort)
-	
+
 	// Configure metrics collector
 	kafkaAddrs := []string{config.BootstrapServers}
 	dashboardServer.GetMetricsCollector().Configure(kafkaAddrs, config.FlinkURL, config.SchemaRegistryURL)
@@ -194,22 +194,22 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	go func() {
 		// Initialize dashboard status
 		status := &dashboard.PipelineStatus{
-			StartTime:        time.Now(),
-			Status:           "RUNNING",
-			Duration:         0,
-			KafkaMetrics:     &dashboard.KafkaMetrics{Topics: make(map[string]*dashboard.TopicMetrics)},
-			FlinkMetrics:     &dashboard.FlinkMetrics{
+			StartTime:    time.Now(),
+			Status:       "RUNNING",
+			Duration:     0,
+			KafkaMetrics: &dashboard.KafkaMetrics{Topics: make(map[string]*dashboard.TopicMetrics)},
+			FlinkMetrics: &dashboard.FlinkMetrics{
 				Jobs:          make(map[string]*dashboard.FlinkJob),
 				SQLStatements: make(map[string]*dashboard.FlinkStatement),
 			},
-			ProducerMetrics:  &dashboard.ProducerMetrics{Status: "STARTING"},
-			ConsumerMetrics:  &dashboard.ConsumerMetrics{Status: "STARTING"},
+			ProducerMetrics: &dashboard.ProducerMetrics{Status: "STARTING"},
+			ConsumerMetrics: &dashboard.ConsumerMetrics{Status: "STARTING"},
 			ExecutionSummary: &dashboard.ExecutionSummary{
 				DataQuality: &dashboard.DataQualityMetrics{},
 				Performance: &dashboard.PerformanceMetrics{},
 			},
-			Errors:       []dashboard.PipelineError{},
-			LastUpdated:  time.Now(),
+			Errors:      []dashboard.PipelineError{},
+			LastUpdated: time.Now(),
 		}
 		dashboardServer.UpdatePipelineStatus(status)
 
@@ -237,7 +237,7 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
-	
+
 	if err := dashboardServer.Stop(shutdownCtx); err != nil {
 		fmt.Printf("⚠️  Error during dashboard shutdown: %v\n", err)
 	}
