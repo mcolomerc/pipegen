@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"pipegen/internal/types"
 )
 
 // FlinkDeployer handles FlinkSQL statement deployment via Confluent Cloud API
@@ -19,7 +20,7 @@ func NewFlinkDeployer(config *Config) *FlinkDeployer {
 }
 
 // Deploy executes FlinkSQL statements in Confluent Cloud
-func (fd *FlinkDeployer) Deploy(ctx context.Context, statements []*SQLStatement, resources *Resources) ([]string, error) {
+func (fd *FlinkDeployer) Deploy(ctx context.Context, statements []*types.SQLStatement, resources *Resources) ([]string, error) {
 	fmt.Printf("⚡ Deploying %d FlinkSQL statements...\n", len(statements))
 
 	var deploymentIDs []string
@@ -48,7 +49,7 @@ func (fd *FlinkDeployer) Deploy(ctx context.Context, statements []*SQLStatement,
 type StatusCallback func(statementName, status, phase, deploymentID, errorMsg string)
 
 // DeployWithStatusTracking executes FlinkSQL statements with status tracking
-func (fd *FlinkDeployer) DeployWithStatusTracking(ctx context.Context, statements []*SQLStatement, resources *Resources, statusCallback StatusCallback) ([]string, error) {
+func (fd *FlinkDeployer) DeployWithStatusTracking(ctx context.Context, statements []*types.SQLStatement, resources *Resources, statusCallback StatusCallback) ([]string, error) {
 	fmt.Printf("⚡ Deploying %d FlinkSQL statements with status tracking...\n", len(statements))
 
 	var deploymentIDs []string

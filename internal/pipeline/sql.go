@@ -6,15 +6,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	
+	"pipegen/internal/types"
 )
-
-// SQLStatement represents a FlinkSQL statement
-type SQLStatement struct {
-	Name     string
-	Content  string
-	FilePath string
-	Order    int
-}
 
 // SQLLoader handles loading and parsing SQL statements from files
 type SQLLoader struct {
@@ -29,7 +23,7 @@ func NewSQLLoader(projectDir string) *SQLLoader {
 }
 
 // LoadStatements loads all SQL statements from the sql/ directory
-func (loader *SQLLoader) LoadStatements() ([]*SQLStatement, error) {
+func (loader *SQLLoader) LoadStatements() ([]*types.SQLStatement, error) {
 	sqlDir := filepath.Join(loader.projectDir, "sql")
 
 	// Check if sql directory exists
@@ -43,7 +37,7 @@ func (loader *SQLLoader) LoadStatements() ([]*SQLStatement, error) {
 		return nil, fmt.Errorf("failed to read sql directory: %w", err)
 	}
 
-	var statements []*SQLStatement
+	var statements []*types.SQLStatement
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
@@ -81,7 +75,7 @@ func (loader *SQLLoader) LoadStatements() ([]*SQLStatement, error) {
 }
 
 // loadStatement loads a single SQL statement from a file
-func (loader *SQLLoader) loadStatement(filePath string) (*SQLStatement, error) {
+func (loader *SQLLoader) loadStatement(filePath string) (*types.SQLStatement, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
@@ -99,7 +93,7 @@ func (loader *SQLLoader) loadStatement(filePath string) (*SQLStatement, error) {
 	filename := filepath.Base(filePath)
 	name := strings.TrimSuffix(filename, ".sql")
 
-	statement := &SQLStatement{
+	statement := &types.SQLStatement{
 		Name:     name,
 		Content:  sqlContent,
 		FilePath: filePath,
@@ -135,7 +129,7 @@ func (loader *SQLLoader) cleanSQL(sql string) string {
 }
 
 // ValidateStatement performs basic validation on a SQL statement
-func (loader *SQLLoader) ValidateStatement(statement *SQLStatement) error {
+func (loader *SQLLoader) ValidateStatement(statement *types.SQLStatement) error {
 	sql := strings.ToUpper(statement.Content)
 
 	// Check for dangerous operations in production
@@ -172,8 +166,8 @@ func (loader *SQLLoader) ValidateStatement(statement *SQLStatement) error {
 }
 
 // GetStatementsByType categorizes statements by their type
-func (loader *SQLLoader) GetStatementsByType(statements []*SQLStatement) map[string][]*SQLStatement {
-	categories := make(map[string][]*SQLStatement)
+func (loader *SQLLoader) GetStatementsByType(statements []*types.SQLStatement) map[string][]*types.SQLStatement {
+	categories := make(map[string][]*types.SQLStatement)
 
 	for _, stmt := range statements {
 		stmtType := loader.getStatementType(stmt.Content)
@@ -202,7 +196,7 @@ func (loader *SQLLoader) getStatementType(content string) string {
 
 // StatementExecution represents the execution context for a statement
 type StatementExecution struct {
-	Statement    *SQLStatement
+	Statement    *types.SQLStatement
 	Variables    map[string]string
 	ProcessedSQL string
 	ExecutionID  string
@@ -211,7 +205,7 @@ type StatementExecution struct {
 }
 
 // PrepareExecution prepares a statement for execution with variable substitution
-func (loader *SQLLoader) PrepareExecution(statement *SQLStatement, variables map[string]string) *StatementExecution {
+func (loader *SQLLoader) PrepareExecution(statement *types.SQLStatement, variables map[string]string) *StatementExecution {
 	processedSQL := statement.Content
 
 	// Substitute variables

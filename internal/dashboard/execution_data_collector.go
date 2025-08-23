@@ -3,6 +3,8 @@ package dashboard
 import (
 	"sync"
 	"time"
+	
+	"pipegen/internal/pipeline"
 )
 
 // ExecutionDataCollector gathers metrics during pipeline execution
@@ -37,7 +39,7 @@ func NewExecutionDataCollector(executionID string, params ExecutionParameters) *
 }
 
 // UpdateMetrics updates the current metrics
-func (c *ExecutionDataCollector) UpdateMetrics(producerMetrics *ProducerStats, consumerMetrics *ConsumerStats) {
+func (c *ExecutionDataCollector) UpdateMetrics(producerMetrics *pipeline.ProducerStats, consumerMetrics *pipeline.ConsumerStats) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -178,13 +180,12 @@ func (c *ExecutionDataCollector) addThroughputPoint(timestamp time.Time, value f
 // buildSummary creates execution summary
 func (c *ExecutionDataCollector) buildSummary() ExecutionSummary {
 	return ExecutionSummary{
-		Status:                    c.status,
-		TotalMessagesProcessed:    c.metrics.TotalMessages,
-		TotalBytesProcessed:      c.metrics.BytesProcessed,
-		AverageMessagesPerSecond: c.metrics.MessagesPerSecond,
-		TotalErrors:              c.metrics.ErrorCount,
-		SuccessRate:              c.metrics.SuccessRate,
-		ExecutionTime:            time.Since(c.startTime),
+		TotalMessagesProcessed: c.metrics.TotalMessages,
+		TotalBytesProcessed:   c.metrics.BytesProcessed,
+		ThroughputMsgSec:      c.metrics.MessagesPerSecond,
+		ErrorRate:             float64(c.metrics.ErrorCount) / float64(c.metrics.TotalMessages) * 100.0,
+		SuccessRate:           c.metrics.SuccessRate,
+		AverageLatency:        c.metrics.AvgLatency,
 	}
 }
 
@@ -199,7 +200,7 @@ func (c *ExecutionDataCollector) buildChartData() ChartData {
 }
 
 // StartPeriodicCollection starts collecting metrics at regular intervals
-func (c *ExecutionDataCollector) StartPeriodicCollection(producer *Producer, consumer *Consumer, interval time.Duration) chan struct{} {
+func (c *ExecutionDataCollector) StartPeriodicCollection(producer *pipeline.Producer, consumer *pipeline.Consumer, interval time.Duration) chan struct{} {
 	stopChan := make(chan struct{})
 	
 	go func() {
@@ -209,8 +210,8 @@ func (c *ExecutionDataCollector) StartPeriodicCollection(producer *Producer, con
 		for {
 			select {
 			case <-ticker.C:
-				var producerStats *ProducerStats
-				var consumerStats *ConsumerStats
+				var producerStats *pipeline.ProducerStats
+				var consumerStats *pipeline.ConsumerStats
 				
 				if producer != nil {
 					producerStats = producer.GetStats()

@@ -12,6 +12,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"pipegen/internal/pipeline"
+	"pipegen/internal/types"
 )
 
 // StackDeployer handles deployment operations for the local stack
@@ -91,7 +92,7 @@ func (d *StackDeployer) DeployFlinkJobs(ctx context.Context) error {
 }
 
 // extractTopicNames extracts topic names from SQL statements
-func (d *StackDeployer) extractTopicNames(statements []*pipeline.SQLStatement) []string {
+func (d *StackDeployer) extractTopicNames(statements []*types.SQLStatement) []string {
 	topics := make(map[string]bool)
 
 	// Default topics for the pipeline
@@ -216,8 +217,8 @@ func (d *StackDeployer) registerSchema(client *http.Client, subject string, sche
 }
 
 // processStatementsForLocal processes SQL statements for local deployment
-func (d *StackDeployer) processStatementsForLocal(statements []*pipeline.SQLStatement) []*pipeline.SQLStatement {
-	processed := make([]*pipeline.SQLStatement, len(statements))
+func (d *StackDeployer) processStatementsForLocal(statements []*types.SQLStatement) []*types.SQLStatement {
+	processed := make([]*types.SQLStatement, len(statements))
 
 	for i, stmt := range statements {
 		content := stmt.Content
@@ -247,7 +248,7 @@ func (d *StackDeployer) processStatementsForLocal(statements []*pipeline.SQLStat
 			cleanLines = append(cleanLines, line)
 		}
 
-		processed[i] = &pipeline.SQLStatement{
+		processed[i] = &types.SQLStatement{
 			Name:     stmt.Name,
 			Content:  strings.Join(cleanLines, "\n"),
 			FilePath: stmt.FilePath,
@@ -259,7 +260,7 @@ func (d *StackDeployer) processStatementsForLocal(statements []*pipeline.SQLStat
 }
 
 // deployFlinkStatement deploys a single FlinkSQL statement
-func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *pipeline.SQLStatement) error {
+func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQLStatement) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	// Create SQL job submission payload
@@ -289,7 +290,7 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *pipeline
 }
 
 // deployViaRESTAPI deploys via Flink's REST API (fallback method)
-func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *pipeline.SQLStatement) error {
+func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *types.SQLStatement) error {
 	// For now, we'll create a simple JAR file that contains the SQL statement
 	// In a production environment, you'd want to create a proper Flink job
 

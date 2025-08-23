@@ -7,6 +7,7 @@ import (
 	"time"
 	"crypto/rand"
 	"encoding/hex"
+	"pipegen/internal/types"
 )
 
 // Config holds the configuration for pipeline execution
@@ -241,7 +242,7 @@ func (r *Runner) cleanup(ctx context.Context, resources *Resources, deploymentID
 }
 
 // initializeSQLTracking initializes SQL statement tracking in the dashboard
-func (r *Runner) initializeSQLTracking(statements []*SQLStatement) {
+func (r *Runner) initializeSQLTracking(statements []*types.SQLStatement) {
 	// Create variables map for substitution
 	variables := map[string]string{
 		"${BOOTSTRAP_SERVERS}":   r.config.BootstrapServers,
@@ -251,7 +252,7 @@ func (r *Runner) initializeSQLTracking(statements []*SQLStatement) {
 
 	// Use type assertion to access dashboard methods
 	if ds, ok := r.dashboardServer.(interface {
-		InitializeSQLStatements([]*SQLStatement, map[string]string)
+		InitializeSQLStatements([]*types.SQLStatement, map[string]string)
 	}); ok {
 		ds.InitializeSQLStatements(statements, variables)
 	}

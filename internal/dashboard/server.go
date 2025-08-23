@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"pipegen/internal/pipeline"
+	"pipegen/internal/types"
 )
 
 // webFiles will be injected from main package
@@ -342,7 +343,7 @@ func (ds *DashboardServer) GetMetricsCollector() *MetricsCollector {
 }
 
 // InitializeSQLStatements initializes tracking for FlinkSQL statements
-func (ds *DashboardServer) InitializeSQLStatements(statements []*pipeline.SQLStatement, variables map[string]string) {
+func (ds *DashboardServer) InitializeSQLStatements(statements []*types.SQLStatement, variables map[string]string) {
 	ds.metricsCollector.InitializeSQLStatements(statements, variables)
 }
 

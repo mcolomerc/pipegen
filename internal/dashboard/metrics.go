@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"pipegen/internal/pipeline"
+	"pipegen/internal/types"
 )
 
 // MetricsCollector collects metrics from various pipeline components
@@ -440,7 +440,7 @@ func (mc *MetricsCollector) suggestResolution(component, message string) string 
 }
 
 // InitializeSQLStatements initializes SQL statement tracking from loaded statements
-func (mc *MetricsCollector) InitializeSQLStatements(statements []*pipeline.SQLStatement, variables map[string]string) {
+func (mc *MetricsCollector) InitializeSQLStatements(statements []*types.SQLStatement, variables map[string]string) {
 	mc.metricsLock.Lock()
 	defer mc.metricsLock.Unlock()
 

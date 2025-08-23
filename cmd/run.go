@@ -23,16 +23,17 @@ var runCmd = &cobra.Command{
 2. Deploys FlinkSQL statements  
 3. Starts producer with configured message rate
 4. Starts consumer for output validation
-5. Optionally generates detailed HTML execution reports
+5. Generates detailed HTML execution reports (default)
 6. Cleans up resources on completion
 
-Use --generate-report to create comprehensive HTML reports with:
+HTML execution reports include:
 • Execution metrics and performance charts
 • Parameter tracking and configuration details  
 • Interactive visualizations using Chart.js
 • Professional theme matching the dashboard
 
-Reports are saved with timestamps to prevent overwrites.`,
+Reports are saved with timestamps to prevent overwrites.
+Use --generate-report=false to disable report generation.`,
 	RunE: runPipeline,
 }
 
@@ -45,7 +46,7 @@ func init() {
 	runCmd.Flags().Bool("dry-run", false, "Show what would be executed without running")
 	runCmd.Flags().Bool("dashboard", false, "Start live dashboard during pipeline execution")
 	runCmd.Flags().Int("dashboard-port", 3000, "Dashboard server port")
-	runCmd.Flags().Bool("generate-report", false, "Generate HTML execution report")
+	runCmd.Flags().Bool("generate-report", true, "Generate HTML execution report")
 	runCmd.Flags().String("reports-dir", "", "Directory to save execution reports (default: project-dir/reports)")
 }
 
