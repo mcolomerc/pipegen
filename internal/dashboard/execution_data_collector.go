@@ -82,7 +82,25 @@ func (c *ExecutionDataCollector) UpdateFlinkMetrics(flinkMetrics *FlinkMetrics) 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	
-	c.metrics.FlinkMetrics = flinkMetrics
+	// Convert FlinkMetrics to ExecutionFlinkMetrics for the report
+	if flinkMetrics != nil && len(flinkMetrics.Jobs) > 0 {
+		// Get first job's metrics (assuming single job for simplicity)
+		for jobID, job := range flinkMetrics.Jobs {
+			execFlinkMetrics := &ExecutionFlinkMetrics{
+				JobID:              jobID,
+				JobStatus:          job.Status,
+				TaskManagers:       flinkMetrics.TaskManagerCount,
+				TaskSlots:          0, // Would need to be computed from actual data
+				ProcessedRecords:   job.RecordsIn + job.RecordsOut,
+				ProcessedBytes:     0, // FlinkJob doesn't have bytes processed
+				BackPressureStatus: job.BackPressure,
+				Checkpoints:        0, // Would need checkpoint data
+				RestartCount:       0, // Would need restart data
+			}
+			c.metrics.FlinkMetrics = execFlinkMetrics
+			break // Only process first job
+		}
+	}
 }
 
 // AddLatencyPoint adds a latency measurement
@@ -133,16 +151,16 @@ func (c *ExecutionDataCollector) SetStatus(status string) {
 }
 
 // GetCurrentReport generates a report with current data
-func (c *ExecutionDataCollector) GetCurrentReport(pipelineName, pipelineVersion string) *ExecutionReport {
+func (c *ExecutionDataCollector) GetCurrentReport(pipelineName, pipelineVersion string) *ExecutionReportData {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-
-	return &ExecutionReport{
+	
+	return &ExecutionReportData{
 		Timestamp:       c.startTime,
 		ExecutionID:     c.executionID,
 		Parameters:      c.parameters,
 		Metrics:         c.metrics,
-		Summary:         c.buildSummary(),
+		Summary:         c.buildReportSummary(),
 		Charts:          c.buildChartData(),
 		Status:          c.status,
 		Duration:        time.Since(c.startTime),
@@ -189,13 +207,26 @@ func (c *ExecutionDataCollector) buildSummary() ExecutionSummary {
 	}
 }
 
+// buildReportSummary creates execution report summary
+func (c *ExecutionDataCollector) buildReportSummary() ExecutionReportSummary {
+	return ExecutionReportSummary{
+		Status:         c.status,
+		StartTime:      c.startTime,
+		EndTime:        time.Now(),
+		Duration:       time.Since(c.startTime),
+		TotalMessages:  c.metrics.TotalMessages,
+		AverageLatency: c.metrics.AvgLatency,
+		PeakThroughput: c.metrics.MessagesPerSecond,
+		ErrorRate:      float64(c.metrics.ErrorCount) / float64(c.metrics.TotalMessages) * 100.0,
+	}
+}
+
 // buildChartData creates chart data structure
 func (c *ExecutionDataCollector) buildChartData() ChartData {
 	return ChartData{
 		MessagesOverTime:   c.dataPoints,
 		ThroughputOverTime: c.throughputData,
-		LatencyOverTime:    c.latencyData,
-		ErrorRateOverTime:  c.errorData,
+		ErrorsOverTime:     c.errorData,
 	}
 }
 

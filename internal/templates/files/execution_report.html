@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PipeGen Execution Report - {{.ExecutionID}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #ff6b35;       
+            --secondary-color: #cc3333;     
+            --accent-color: #666666;        
+            --dark-color: #2c3e50;          
+            --bg-light: #f8f9fa;            
+            --text-primary: #2c3e50;
+            --text-secondary: #666666;
+            --border-color: #e0e6ed;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --gradient-primary: linear-gradient(135deg, #ff6b35 0%, #cc3333 100%);
+            --gradient-success: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            --gradient-warning: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+            --gradient-info: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0;
+            gap: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: white;
+            padding: 2rem 2rem 1.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            color: var(--text-primary);
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            object-fit: contain;
+        }
+
+        .header-info {
+            text-align: left;
+        }
+
+        .header-info h2 {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-top: 0.5rem;
+        }
+
+        .execution-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+
+        .timestamp {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .duration {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-success { 
+            background: var(--gradient-success); 
+            color: white; 
+        }
+        .status-error { 
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); 
+            color: white; 
+        }
+        .status-warning { 
+            background: var(--gradient-warning); 
+            color: white; 
+        }
+
+        .main-content {
+            padding: 0 2rem 2rem 2rem;
+            flex: 1;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: none;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-header {
+            background: var(--gradient-primary);
+            color: white;
+            padding: 1.2rem 1.5rem;
+            margin: 0;
+        }
+
+        .card h3 {
+            font-size: 1.1rem;
+            margin: 0;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+        }
+
+        .card-content {
+            padding: 1.5rem;
+        }
+
+        .card.summary-card .card-header {
+            background: var(--gradient-primary);
+        }
+
+        .card.metrics-card .card-header {
+            background: var(--gradient-info);
+        }
+
+        .card.parameters-card .card-header {
+            background: var(--gradient-success);
+        }
+
+        .card.chart-card .card-header {
+            background: var(--gradient-warning);
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+        }
+
+        .parameters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .parameter-item {
+            padding: 1rem;
+            background: var(--bg-light);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .parameter-label {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .parameter-value {
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+            font-size: 1rem;
+            word-break: break-all;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 1.5rem;
+            background: var(--bg-light);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .large-card {
+            grid-column: span 2;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 1rem;
+        }
+
+        .footer {
+            background: white;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 2rem;
+        }
+
+        .footer p {
+            margin: 0.25rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+                gap: 1rem;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .large-card {
+                grid-column: span 1;
+            }
+
+            .main-content {
+                padding: 0 1rem 2rem 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-info">
+                <h1>
+                    <img src="data:image/png;base64,{{.LogoBase64}}" class="logo" alt="PipeGen">
+                    Execution Report
+                </h1>
+                <h2>{{.PipelineName}} {{.PipelineVersion}}</h2>
+            </div>
+            <div class="execution-info">
+                <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05 MST"}}</div>
+                <div class="duration">Duration: {{.Duration}}</div>
+                <div class="status-badge status-{{if eq .Status "completed"}}success{{else if eq .Status "failed"}}error{{else}}warning{{end}}">
+                    {{.Status}}
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="cards-grid">
+                <!-- Execution Summary -->
+                <div class="card summary-card large-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-tachometer-alt"></i> Execution Summary</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="summary-stats">
+                            <div class="stat-box">
+                                <div class="stat-number">{{.Metrics.TotalMessages}}</div>
+                                <div class="stat-label">Total Messages</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number">{{printf "%.1f" .Metrics.MessagesPerSecond}}</div>
+                                <div class="stat-label">Messages/Second</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number">{{printf "%.1f%%" .Metrics.SuccessRate}}</div>
+                                <div class="stat-label">Success Rate</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number">{{.Metrics.ErrorCount}}</div>
+                                <div class="stat-label">Errors</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Execution Parameters -->
+                <div class="card parameters-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-cogs"></i> Execution Parameters</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="parameters-grid">
+                            <div class="parameter-item">
+                                <div class="parameter-label">Message Rate</div>
+                                <div class="parameter-value">{{.Parameters.MessageRate}} msg/sec</div>
+                            </div>
+                            <div class="parameter-item">
+                                <div class="parameter-label">Duration</div>
+                                <div class="parameter-value">{{.Parameters.Duration}}</div>
+                            </div>
+                            <div class="parameter-item">
+                                <div class="parameter-label">Bootstrap Servers</div>
+                                <div class="parameter-value">{{.Parameters.BootstrapServers}}</div>
+                            </div>
+                            <div class="parameter-item">
+                                <div class="parameter-label">Flink URL</div>
+                                <div class="parameter-value">{{.Parameters.FlinkURL}}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Metrics -->
+                <div class="card metrics-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-bar"></i> Detailed Metrics</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="metric-row">
+                            <div class="metric-label">Average Latency</div>
+                            <div class="metric-value">{{.Metrics.AvgLatency}}</div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-label">Bytes Processed</div>
+                            <div class="metric-value">{{.Metrics.BytesProcessed}} B</div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-label">Success Rate</div>
+                            <div class="metric-value">{{printf "%.2f%%" .Metrics.SuccessRate}}</div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-label">Error Count</div>
+                            <div class="metric-value">{{.Metrics.ErrorCount}}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {{if .Charts.MessagesOverTime}}
+                <!-- Messages Over Time Chart -->
+                <div class="card chart-card large-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-line"></i> Messages Over Time</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="chart-container">
+                            <canvas id="messagesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+
+                {{if .Charts.ThroughputOverTime}}
+                <!-- Throughput Over Time Chart -->
+                <div class="card chart-card large-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-tachometer-alt"></i> Throughput Over Time</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="chart-container">
+                            <canvas id="throughputChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Generated by PipeGen v{{.PipelineVersion}} on {{.Timestamp.Format "2006-01-02 15:04:05 MST"}}</p>
+            <p>Execution ID: {{.ExecutionID}}</p>
+        </div>
+    </div>
+
+    <script>
+        {{if .Charts.MessagesOverTime}}
+        // Messages Over Time Chart
+        const messagesCtx = document.getElementById('messagesChart').getContext('2d');
+        new Chart(messagesCtx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Messages',
+                    data: [
+                        {{range .Charts.MessagesOverTime}}
+                        {x: '{{.Timestamp.Format "2006-01-02T15:04:05Z"}}', y: {{.Value}}},
+                        {{end}}
+                    ],
+                    borderColor: '#ff6b35',
+                    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            displayFormats: {
+                                minute: 'HH:mm'
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        {{end}}
+
+        {{if .Charts.ThroughputOverTime}}
+        // Throughput Over Time Chart
+        const throughputCtx = document.getElementById('throughputChart').getContext('2d');
+        new Chart(throughputCtx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Messages/sec',
+                    data: [
+                        {{range .Charts.ThroughputOverTime}}
+                        {x: '{{.Timestamp.Format "2006-01-02T15:04:05Z"}}', y: {{.Value}}},
+                        {{end}}
+                    ],
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            displayFormats: {
+                                minute: 'HH:mm'
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        {{end}}
+    </script>
+</body>
+</html>
