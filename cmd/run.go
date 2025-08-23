@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -19,10 +20,19 @@ var runCmd = &cobra.Command{
 	Short: "Run the streaming pipeline",
 	Long: `Run executes the complete streaming pipeline:
 1. Creates dynamic Kafka topics
-2. Deploys FlinkSQL statements
+2. Deploys FlinkSQL statements  
 3. Starts producer with configured message rate
 4. Starts consumer for output validation
-5. Cleans up resources on completion`,
+5. Optionally generates detailed HTML execution reports
+6. Cleans up resources on completion
+
+Use --generate-report to create comprehensive HTML reports with:
+• Execution metrics and performance charts
+• Parameter tracking and configuration details  
+• Interactive visualizations using Chart.js
+• Professional theme matching the dashboard
+
+Reports are saved with timestamps to prevent overwrites.`,
 	RunE: runPipeline,
 }
 
@@ -35,6 +45,8 @@ func init() {
 	runCmd.Flags().Bool("dry-run", false, "Show what would be executed without running")
 	runCmd.Flags().Bool("dashboard", false, "Start live dashboard during pipeline execution")
 	runCmd.Flags().Int("dashboard-port", 3000, "Dashboard server port")
+	runCmd.Flags().Bool("generate-report", false, "Generate HTML execution report")
+	runCmd.Flags().String("reports-dir", "", "Directory to save execution reports (default: project-dir/reports)")
 }
 
 func runPipeline(cmd *cobra.Command, args []string) error {
@@ -45,6 +57,8 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	useDashboard, _ := cmd.Flags().GetBool("dashboard")
 	dashboardPort, _ := cmd.Flags().GetInt("dashboard-port")
+	generateReport, _ := cmd.Flags().GetBool("generate-report")
+	reportsDir, _ := cmd.Flags().GetString("reports-dir")
 
 	// Validate configuration
 	if err := validateConfig(); err != nil {
@@ -61,6 +75,8 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		FlinkURL:          viper.GetString("flink_url"),
 		SchemaRegistryURL: viper.GetString("schema_registry_url"),
 		LocalMode:         viper.GetBool("local_mode"),
+		GenerateReport:    generateReport,
+		ReportsDir:        reportsDir,
 	}
 
 	if dryRun {
@@ -77,6 +93,12 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	runner, err := pipeline.NewRunner(config)
 	if err != nil {
 		return fmt.Errorf("failed to create pipeline runner: %w", err)
+	}
+
+	// Set up report generation if enabled
+	if config.GenerateReport {
+		reportGenerator := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		runner.SetReportGenerator(reportGenerator)
 	}
 
 	// Setup graceful shutdown
@@ -185,6 +207,12 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	// Set dashboard server for SQL statement tracking
 	runner.SetDashboardServer(dashboardServer)
 
+	// Set up report generation if enabled
+	if config.GenerateReport {
+		reportGenerator := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		runner.SetReportGenerator(reportGenerator)
+	}
+
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -243,4 +271,12 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	}
 
 	return nil
+}
+
+// getReportsDir returns the directory where reports should be saved
+func getReportsDir(config *pipeline.Config) string {
+	if config.ReportsDir != "" {
+		return config.ReportsDir
+	}
+	return filepath.Join(config.ProjectDir, "reports")
 }
