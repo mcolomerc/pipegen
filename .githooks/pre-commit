@@ -1,0 +1,37 @@
+#!/bin/bash
+# Pre-commit hook to run golangci-lint before commits
+
+set -e
+
+echo "🔍 Running golangci-lint..."
+
+# Run golangci-lint
+if ! golangci-lint run --timeout=10m; then
+    echo "❌ golangci-lint found issues. Please fix them before committing."
+    echo "💡 Run 'golangci-lint run --fix' to auto-fix some issues"
+    exit 1
+fi
+
+echo "✅ golangci-lint passed!"
+
+# Run go fmt check
+echo "🔍 Checking go fmt..."
+if [ -n "$(gofmt -l .)" ]; then
+    echo "❌ Code is not formatted. Run 'go fmt ./...' to fix:"
+    gofmt -l .
+    exit 1
+fi
+
+echo "✅ go fmt check passed!"
+
+# Run go mod tidy check
+echo "🔍 Checking go mod tidy..."
+go mod tidy
+if [ -n "$(git diff --name-only)" ]; then
+    echo "❌ go.mod or go.sum is not tidy. Please commit the changes:"
+    git diff --name-only
+    exit 1
+fi
+
+echo "✅ go mod tidy check passed!"
+echo "🎉 All pre-commit checks passed!"

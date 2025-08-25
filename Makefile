@@ -96,6 +96,47 @@ fmt:
 	@$(GO) fmt ./...
 	@echo "✓ Code formatted"
 
+## Lint code with fixes
+lint-fix:
+	@echo "Running linters with auto-fixes..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --fix; \
+	else \
+		echo "golangci-lint not found, installing..."; \
+		$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		golangci-lint run --fix; \
+	fi
+	@echo "✓ Linting with fixes completed"
+
+## Pre-commit checks (runs before commits)
+pre-commit: fmt lint test
+	@echo "✅ All pre-commit checks passed!"
+
+## Pre-push checks (comprehensive checks before pushing to main)
+pre-push: clean fmt lint test build
+	@echo "🚀 Pre-push checks completed successfully!"
+
+## Quality gate (all quality checks)
+quality: pre-push
+	@echo "🎉 All quality gates passed!"
+
+## Setup git hooks
+setup-hooks:
+	@echo "Setting up git hooks..."
+	@chmod +x .githooks/pre-commit .githooks/pre-push
+	@git config core.hooksPath .githooks
+	@echo "✓ Git hooks configured"
+
+## Install pre-commit framework
+setup-pre-commit:
+	@echo "Setting up pre-commit framework..."
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		pre-commit install; \
+		echo "✓ pre-commit hooks installed"; \
+	else \
+		echo "⚠️  pre-commit not found. Install with: pip install pre-commit"; \
+	fi
+
 ## Install binary to GOBIN
 install: build
 	@echo "Installing $(PROJECT_NAME)..."

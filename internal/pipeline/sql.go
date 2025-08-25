@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	
+
 	"pipegen/internal/types"
 )
 

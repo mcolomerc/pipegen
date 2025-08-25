@@ -163,11 +163,11 @@ func dockerComposeDown(projectDir string) error {
 		// If compose fails, try to remove containers by name
 		containerNames := []string{"pipegen-kafka", "pipegen-flink-jobmanager", "pipegen-flink-taskmanager", "pipegen-schema-registry"}
 		for _, name := range containerNames {
-		stopCmd := exec.Command("docker", "stop", name)
-		_ = stopCmd.Run() // Ignore errors
-		rmCmd := exec.Command("docker", "rm", name)
-		_ = rmCmd.Run() // Ignore errors
-	}
+			stopCmd := exec.Command("docker", "stop", name)
+			_ = stopCmd.Run() // Ignore errors
+			rmCmd := exec.Command("docker", "rm", name)
+			_ = rmCmd.Run() // Ignore errors
+		}
 	}
 	return nil
 }

@@ -9,10 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"pipegen/internal/dashboard"
 	"pipegen/internal/pipeline"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var runCmd = &cobra.Command{

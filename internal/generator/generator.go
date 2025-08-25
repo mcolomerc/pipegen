@@ -249,8 +249,6 @@ func (g *ProjectGenerator) generateConfig() error {
 	return writeFile(configPath, configContent)
 }
 
-
-
 func (g *ProjectGenerator) generateDockerFiles() error {
 	// Generate docker-compose.yml
 	if err := g.generateDockerCompose(); err != nil {
@@ -307,8 +305,6 @@ func (g *ProjectGenerator) generateREADME() error {
 	readmePath := filepath.Join(g.ProjectPath, "README.md")
 	return writeFile(readmePath, readmeContent)
 }
-
-
 
 // Helper function to write content to file
 func writeFile(filePath, content string) error {

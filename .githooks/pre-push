@@ -1,0 +1,42 @@
+#!/bin/bash
+# Pre-push hook to run comprehensive checks before pushing to main
+
+set -e
+
+protected_branch="main"
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+echo "🚀 Pre-push hook: Checking branch '$current_branch'"
+
+# Only run checks when pushing to main
+if [ "$current_branch" = "$protected_branch" ]; then
+    echo "🔒 Pushing to protected branch '$protected_branch' - running comprehensive checks..."
+    
+    # Run golangci-lint
+    echo "🔍 Running golangci-lint..."
+    if ! golangci-lint run --timeout=10m; then
+        echo "❌ golangci-lint failed. Push aborted."
+        exit 1
+    fi
+    echo "✅ golangci-lint passed!"
+    
+    # Run tests
+    echo "🧪 Running tests..."
+    if ! go test -v -race ./...; then
+        echo "❌ Tests failed. Push aborted."
+        exit 1
+    fi
+    echo "✅ Tests passed!"
+    
+    # Build check
+    echo "🔨 Running build check..."
+    if ! go build -v ./...; then
+        echo "❌ Build failed. Push aborted."
+        exit 1
+    fi
+    echo "✅ Build passed!"
+    
+    echo "🎉 All checks passed! Proceeding with push to '$protected_branch'."
+else
+    echo "ℹ️ Not pushing to main - skipping comprehensive checks"
+fi

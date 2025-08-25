@@ -3,8 +3,8 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"strings"
 	"pipegen/internal/types"
+	"strings"
 )
 
 // FlinkDeployer handles FlinkSQL statement deployment via Confluent Cloud API
