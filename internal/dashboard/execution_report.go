@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	
+
 	"pipegen/internal/pipeline"
 )
 
@@ -21,7 +21,7 @@ type ExecutionReportGenerator struct {
 // NewExecutionReportGenerator creates a new execution report generator
 func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, error) {
 	templatePath := filepath.Join("internal", "templates", "files", "execution_report.html")
-	
+
 	// Load and encode logo
 	logoPath := filepath.Join("web", "static", "logo.png")
 	logoBase64 := ""
@@ -31,7 +31,7 @@ func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, e
 			logoBase64 = base64.StdEncoding.EncodeToString(logoData)
 		}
 	}
-	
+
 	return &ExecutionReportGenerator{
 		outputDir:    outputDir,
 		templatePath: templatePath,
@@ -41,17 +41,17 @@ func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, e
 
 // ExecutionReportData holds all data needed for the execution report template
 type ExecutionReportData struct {
-	ExecutionID     string                   `json:"execution_id"`
-	Timestamp       time.Time                `json:"timestamp"`
-	Parameters      ExecutionParameters      `json:"parameters"`
-	Metrics         ExecutionMetrics         `json:"metrics"`
-	Summary         ExecutionReportSummary   `json:"summary"`
-	Charts          ChartData                `json:"charts"`
-	Status          string                   `json:"status"`
-	Duration        time.Duration            `json:"duration"`
-	PipelineName    string                   `json:"pipeline_name"`
-	PipelineVersion string                   `json:"pipeline_version"`
-	LogoBase64      string                   `json:"logo_base64"`
+	ExecutionID     string                 `json:"execution_id"`
+	Timestamp       time.Time              `json:"timestamp"`
+	Parameters      ExecutionParameters    `json:"parameters"`
+	Metrics         ExecutionMetrics       `json:"metrics"`
+	Summary         ExecutionReportSummary `json:"summary"`
+	Charts          ChartData              `json:"charts"`
+	Status          string                 `json:"status"`
+	Duration        time.Duration          `json:"duration"`
+	PipelineName    string                 `json:"pipeline_name"`
+	PipelineVersion string                 `json:"pipeline_version"`
+	LogoBase64      string                 `json:"logo_base64"`
 }
 
 // ExecutionParameters holds the parameters used for the execution
@@ -95,27 +95,27 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	if err := os.MkdirAll(g.outputDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
-	
+
 	// Load template
 	tmplContent, err := os.ReadFile(g.templatePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
-	
+
 	// Parse template
 	tmpl, err := template.New("report").Parse(string(tmplContent))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-	
+
 	// Add logo to data
 	data.LogoBase64 = g.logoBase64
-	
+
 	// Generate timestamp for filename
 	timestamp := time.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("pipegen-execution-report-%s.html", timestamp)
 	filePath := filepath.Join(g.outputDir, filename)
-	
+
 	// Create output file
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -124,11 +124,11 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	defer func() {
 		_ = file.Close() // Ignore close error in defer
 	}()
-	
+
 	// Execute template
 	if err := tmpl.Execute(file, data); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-	
+
 	return filePath, nil
 }

@@ -3,23 +3,23 @@ package dashboard
 import (
 	"sync"
 	"time"
-	
+
 	"pipegen/internal/pipeline"
 )
 
 // ExecutionDataCollector gathers metrics during pipeline execution
 type ExecutionDataCollector struct {
-	executionID     string
-	startTime       time.Time
-	parameters      ExecutionParameters
-	metrics         ExecutionMetrics
-	status          string
-	mutex           sync.RWMutex
-	dataPoints      []TimeSeriesPoint
-	throughputData  []TimeSeriesPoint
-	latencyData     []TimeSeriesPoint
-	errorData       []TimeSeriesPoint
-	lastUpdate      time.Time
+	executionID    string
+	startTime      time.Time
+	parameters     ExecutionParameters
+	metrics        ExecutionMetrics
+	status         string
+	mutex          sync.RWMutex
+	dataPoints     []TimeSeriesPoint
+	throughputData []TimeSeriesPoint
+	latencyData    []TimeSeriesPoint
+	errorData      []TimeSeriesPoint
+	lastUpdate     time.Time
 }
 
 // NewExecutionDataCollector creates a new data collector for an execution
@@ -43,14 +43,14 @@ func (c *ExecutionDataCollector) UpdateMetrics(producerMetrics *pipeline.Produce
 	defer c.mutex.Unlock()
 
 	now := time.Now()
-	
+
 	// Update basic metrics
 	if producerMetrics != nil {
 		c.metrics.ProducerMetrics = producerMetrics
 		c.metrics.TotalMessages += producerMetrics.MessagesSent
 		c.metrics.BytesProcessed += producerMetrics.BytesSent
 	}
-	
+
 	if consumerMetrics != nil {
 		c.metrics.ConsumerMetrics = consumerMetrics
 		c.metrics.ErrorCount += consumerMetrics.ErrorCount
@@ -72,7 +72,7 @@ func (c *ExecutionDataCollector) UpdateMetrics(producerMetrics *pipeline.Produce
 	// Add data points for charts
 	c.addDataPoint(now, float64(c.metrics.TotalMessages))
 	c.addThroughputPoint(now, c.metrics.MessagesPerSecond)
-	
+
 	c.lastUpdate = now
 }
 
@@ -80,7 +80,7 @@ func (c *ExecutionDataCollector) UpdateMetrics(producerMetrics *pipeline.Produce
 func (c *ExecutionDataCollector) UpdateFlinkMetrics(flinkMetrics *FlinkMetrics) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	// Convert FlinkMetrics to ExecutionFlinkMetrics for the report
 	if flinkMetrics != nil && len(flinkMetrics.Jobs) > 0 {
 		// Get first job's metrics (assuming single job for simplicity)
@@ -106,13 +106,13 @@ func (c *ExecutionDataCollector) UpdateFlinkMetrics(flinkMetrics *FlinkMetrics) 
 func (c *ExecutionDataCollector) AddLatencyPoint(latency time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	now := time.Now()
 	c.latencyData = append(c.latencyData, TimeSeriesPoint{
 		Timestamp: now,
 		Value:     float64(latency.Milliseconds()),
 	})
-	
+
 	// Update average latency (simple moving average)
 	if len(c.latencyData) > 0 {
 		var sum float64
@@ -127,14 +127,14 @@ func (c *ExecutionDataCollector) AddLatencyPoint(latency time.Duration) {
 func (c *ExecutionDataCollector) AddErrorPoint(errorType string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	now := time.Now()
 	c.metrics.ErrorCount++
 	c.errorData = append(c.errorData, TimeSeriesPoint{
 		Timestamp: now,
 		Value:     1.0,
 	})
-	
+
 	// Recalculate success rate
 	if c.metrics.TotalMessages > 0 {
 		c.metrics.SuccessRate = float64(c.metrics.TotalMessages-c.metrics.ErrorCount) / float64(c.metrics.TotalMessages) * 100
@@ -145,7 +145,7 @@ func (c *ExecutionDataCollector) AddErrorPoint(errorType string) {
 func (c *ExecutionDataCollector) SetStatus(status string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.status = status
 }
 
@@ -153,7 +153,7 @@ func (c *ExecutionDataCollector) SetStatus(status string) {
 func (c *ExecutionDataCollector) GetCurrentReport(pipelineName, pipelineVersion string) *ExecutionReportData {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	return &ExecutionReportData{
 		Timestamp:       c.startTime,
 		ExecutionID:     c.executionID,
@@ -174,7 +174,7 @@ func (c *ExecutionDataCollector) addDataPoint(timestamp time.Time, value float64
 		Timestamp: timestamp,
 		Value:     value,
 	})
-	
+
 	// Keep only last 100 points to avoid memory issues
 	if len(c.dataPoints) > 100 {
 		c.dataPoints = c.dataPoints[1:]
@@ -187,7 +187,7 @@ func (c *ExecutionDataCollector) addThroughputPoint(timestamp time.Time, value f
 		Timestamp: timestamp,
 		Value:     value,
 	})
-	
+
 	// Keep only last 100 points
 	if len(c.throughputData) > 100 {
 		c.throughputData = c.throughputData[1:]
@@ -220,32 +220,32 @@ func (c *ExecutionDataCollector) buildChartData() ChartData {
 // StartPeriodicCollection starts collecting metrics at regular intervals
 func (c *ExecutionDataCollector) StartPeriodicCollection(producer *pipeline.Producer, consumer *pipeline.Consumer, interval time.Duration) chan struct{} {
 	stopChan := make(chan struct{})
-	
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
 				var producerStats *pipeline.ProducerStats
 				var consumerStats *pipeline.ConsumerStats
-				
+
 				if producer != nil {
 					producerStats = producer.GetStats()
 				}
-				
+
 				if consumer != nil {
 					consumerStats = consumer.GetStats()
 				}
-				
+
 				c.UpdateMetrics(producerStats, consumerStats)
-				
+
 			case <-stopChan:
 				return
 			}
 		}
 	}()
-	
+
 	return stopChan
 }

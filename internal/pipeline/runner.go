@@ -2,12 +2,12 @@ package pipeline
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
-	"time"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"path/filepath"
 	"pipegen/internal/types"
+	"time"
 )
 
 // Config holds the configuration for pipeline execution
@@ -94,11 +94,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Initialize execution data collector if report generation is enabled
 	var dataCollector interface{}
 	var executionID string
-	
+
 	if r.config.GenerateReport && r.reportGenerator != nil {
 		executionID = r.generateExecutionID()
 		fmt.Printf("📊 Execution ID: %s\n", executionID)
-		
+
 		// Create parameters for the report
 		// Note: The actual types would need to be imported from dashboard package
 		// This is a simplified version showing the integration pattern
@@ -280,16 +280,16 @@ func (r *Runner) createDataCollector(executionID string) (interface{}, bool) {
 	// This would create the actual data collector with proper types
 	// For now, returning a placeholder to show the pattern
 	return map[string]interface{}{
-		"id":         executionID,
+		"id": executionID,
 		"parameters": map[string]interface{}{
 			"message_rate":        r.config.MessageRate,
-			"duration":           r.config.Duration.String(),
-			"bootstrap_servers":  r.config.BootstrapServers,
-			"flink_url":         r.config.FlinkURL,
+			"duration":            r.config.Duration.String(),
+			"bootstrap_servers":   r.config.BootstrapServers,
+			"flink_url":           r.config.FlinkURL,
 			"schema_registry_url": r.config.SchemaRegistryURL,
-			"local_mode":        r.config.LocalMode,
-			"project_dir":       r.config.ProjectDir,
-			"cleanup":           r.config.Cleanup,
+			"local_mode":          r.config.LocalMode,
+			"project_dir":         r.config.ProjectDir,
+			"cleanup":             r.config.Cleanup,
 		},
 	}, true
 }
@@ -301,7 +301,7 @@ func (r *Runner) generateExecutionReport(dataCollector interface{}, status strin
 	}
 
 	fmt.Println("📄 Generating execution report...")
-	
+
 	// This would use the actual report generator interface
 	// For now, we'll create a basic report structure
 	reportData := map[string]interface{}{
@@ -311,18 +311,18 @@ func (r *Runner) generateExecutionReport(dataCollector interface{}, status strin
 		"duration":     duration.String(),
 		"timestamp":    time.Now().Format(time.RFC3339),
 	}
-	
+
 	// Set reports directory if not specified
 	reportsDir := r.config.ReportsDir
 	if reportsDir == "" {
 		reportsDir = filepath.Join(r.config.ProjectDir, "reports")
 	}
-	
+
 	// Create reports directory
 	fmt.Printf("📁 Reports will be saved to: %s\n", reportsDir)
-	
+
 	// The actual implementation would call the report generator here
 	fmt.Printf("✅ Execution report generated for ID: %v\n", reportData["execution_id"])
-	
+
 	return nil
 }
