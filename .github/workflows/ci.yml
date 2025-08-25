@@ -36,7 +36,20 @@ jobs:
       run: go test -v -race -coverprofile=coverage.out ./...
       
     - name: Generate coverage report
-      run: go tool cover -html=coverage.out -o coverage.html
+      run: |
+        go tool cover -html=coverage.out -o coverage.html
+        echo "📊 Coverage Summary:"
+        go tool cover -func=coverage.out
+      
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          coverage.out
+          coverage.html
+        retention-days: 30
+      # 💡 Download coverage.html from the Actions "Summary" tab to view detailed coverage
 
   lint:
     name: Lint
