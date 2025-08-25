@@ -55,25 +55,25 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">pipegen/cmd/check.go (0.0%)</option>
+				<option value="file0">pipegen/cmd/check.go (4.0%)</option>
 				
-				<option value="file1">pipegen/cmd/dashboard.go (0.0%)</option>
+				<option value="file1">pipegen/cmd/dashboard.go (4.7%)</option>
 				
-				<option value="file2">pipegen/cmd/deploy.go (0.0%)</option>
+				<option value="file2">pipegen/cmd/deploy.go (6.5%)</option>
 				
-				<option value="file3">pipegen/cmd/init.go (0.0%)</option>
+				<option value="file3">pipegen/cmd/init.go (6.4%)</option>
 				
-				<option value="file4">pipegen/cmd/root.go (0.0%)</option>
+				<option value="file4">pipegen/cmd/root.go (88.5%)</option>
 				
-				<option value="file5">pipegen/cmd/run.go (0.0%)</option>
+				<option value="file5">pipegen/cmd/run.go (12.1%)</option>
 				
-				<option value="file6">pipegen/cmd/validate.go (0.0%)</option>
+				<option value="file6">pipegen/cmd/validate.go (63.8%)</option>
 				
-				<option value="file7">pipegen/cmd/version.go (0.0%)</option>
+				<option value="file7">pipegen/cmd/version.go (10.0%)</option>
 				
 				<option value="file8">pipegen/internal/dashboard/execution_data_collector.go (0.0%)</option>
 				
-				<option value="file9">pipegen/internal/dashboard/execution_report.go (0.0%)</option>
+				<option value="file9">pipegen/internal/dashboard/execution_report.go (85.7%)</option>
 				
 				<option value="file10">pipegen/internal/dashboard/metrics.go (0.0%)</option>
 				
@@ -91,25 +91,25 @@
 				
 				<option value="file17">pipegen/internal/generator/llm_generator.go (0.0%)</option>
 				
-				<option value="file18">pipegen/internal/llm/service.go (0.0%)</option>
+				<option value="file18">pipegen/internal/llm/service.go (32.8%)</option>
 				
 				<option value="file19">pipegen/internal/llm/utils.go (0.0%)</option>
 				
-				<option value="file20">pipegen/internal/pipeline/consumer.go (0.0%)</option>
+				<option value="file20">pipegen/internal/pipeline/consumer.go (4.5%)</option>
 				
-				<option value="file21">pipegen/internal/pipeline/flink.go (0.0%)</option>
+				<option value="file21">pipegen/internal/pipeline/flink.go (1.7%)</option>
 				
-				<option value="file22">pipegen/internal/pipeline/producer.go (0.0%)</option>
+				<option value="file22">pipegen/internal/pipeline/producer.go (3.2%)</option>
 				
-				<option value="file23">pipegen/internal/pipeline/resources.go (0.0%)</option>
+				<option value="file23">pipegen/internal/pipeline/resources.go (2.4%)</option>
 				
-				<option value="file24">pipegen/internal/pipeline/runner.go (0.0%)</option>
+				<option value="file24">pipegen/internal/pipeline/runner.go (12.3%)</option>
 				
-				<option value="file25">pipegen/internal/pipeline/schema.go (0.0%)</option>
+				<option value="file25">pipegen/internal/pipeline/schema.go (1.0%)</option>
 				
-				<option value="file26">pipegen/internal/pipeline/sql.go (0.0%)</option>
+				<option value="file26">pipegen/internal/pipeline/sql.go (1.3%)</option>
 				
-				<option value="file27">pipegen/internal/templates/manager.go (0.0%)</option>
+				<option value="file27">pipegen/internal/templates/manager.go (77.4%)</option>
 				
 				<option value="file28">pipegen/main.go (0.0%)</option>
 				
@@ -118,17 +118,8 @@
 			<div id="legend">
 				<span>not tracked</span>
 			
-				<span class="cov0">no coverage</span>
-				<span class="cov1">low coverage</span>
-				<span class="cov2">*</span>
-				<span class="cov3">*</span>
-				<span class="cov4">*</span>
-				<span class="cov5">*</span>
-				<span class="cov6">*</span>
-				<span class="cov7">*</span>
-				<span class="cov8">*</span>
-				<span class="cov9">*</span>
-				<span class="cov10">high coverage</span>
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
 			
 			</div>
 		</div>
@@ -158,7 +149,7 @@ This command helps troubleshoot AI-powered features by:
         RunE: runCheck,
 }
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(checkCmd)
 }</span>
 
@@ -257,7 +248,7 @@ var (
         configFile          string
 )
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(dashboardCmd)
 
         dashboardCmd.Flags().IntVarP(&amp;dashboardPort, "port", "p", 3000, "Dashboard server port")
@@ -669,7 +660,7 @@ var deployCmd = &amp;cobra.Command{
         RunE: runDeploy,
 }
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(deployCmd)
         deployCmd.Flags().String("project-dir", ".", "Project directory path")
         deployCmd.Flags().Bool("with-schema-registry", true, "Deploy with Schema Registry")
@@ -899,7 +890,7 @@ For AI-powered generation, use --describe to let LLM generate optimized pipeline
         RunE: runInit,
 }
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(initCmd)
         initCmd.Flags().Bool("force", false, "Overwrite existing project directory")
         initCmd.Flags().String("input-schema", "", "Path to existing AVRO schema file to use as input schema")
@@ -1083,7 +1074,7 @@ func Execute() error <span class="cov0" title="0">{
         return rootCmd.Execute()
 }</span>
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         cobra.OnInitialize(initConfig)
 
         rootCmd.PersistentFlags().StringVar(&amp;cfgFile, "config", "", "config file (default is $HOME/.pipegen.yaml)")
@@ -1105,10 +1096,10 @@ func init() <span class="cov0" title="0">{
 }</span>
 
 // initConfig reads in config file and ENV variables.
-func initConfig() <span class="cov0" title="0">{
+func initConfig() <span class="cov8" title="1">{
         if cfgFile != "" </span><span class="cov0" title="0">{
                 viper.SetConfigFile(cfgFile)
-        }</span> else<span class="cov0" title="0"> {
+        }</span> else<span class="cov8" title="1"> {
                 home, err := os.UserHomeDir()
                 cobra.CheckErr(err)
 
@@ -1118,7 +1109,7 @@ func initConfig() <span class="cov0" title="0">{
                 viper.SetConfigName(".pipegen")
         }</span>
 
-        <span class="cov0" title="0">viper.AutomaticEnv()
+        <span class="cov8" title="1">viper.AutomaticEnv()
 
         if err := viper.ReadInConfig(); err == nil </span><span class="cov0" title="0">{
                 fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
@@ -1166,7 +1157,7 @@ Use --generate-report=false to disable report generation.`,
         RunE: runPipeline,
 }
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(runCmd)
         runCmd.Flags().String("project-dir", ".", "Project directory path")
         runCmd.Flags().Int("message-rate", 100, "Messages per second for producer")
@@ -1257,7 +1248,7 @@ func runPipeline(cmd *cobra.Command, args []string) error <span class="cov0" tit
         return nil</span>
 }
 
-func validateConfig() error <span class="cov0" title="0">{
+func validateConfig() error <span class="cov8" title="1">{
         required := []string{
                 "bootstrap_servers",
                 "flink_url",
@@ -1268,12 +1259,12 @@ func validateConfig() error <span class="cov0" title="0">{
                 required = append(required, "schema_registry_url")
         }</span>
 
-        <span class="cov0" title="0">for _, key := range required </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">for _, key := range required </span><span class="cov8" title="1">{
                 if viper.GetString(key) == "" </span><span class="cov0" title="0">{
                         return fmt.Errorf("missing required configuration: %s", key)
                 }</span>
         }
-        <span class="cov0" title="0">return nil</span>
+        <span class="cov8" title="1">return nil</span>
 }
 
 func showExecutionPlan(config *pipeline.Config) error <span class="cov0" title="0">{
@@ -1440,7 +1431,7 @@ var validateCmd = &amp;cobra.Command{
         RunE: runValidate,
 }
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(validateCmd)
         validateCmd.Flags().String("project-dir", ".", "Project directory path")
         validateCmd.Flags().Bool("check-connectivity", false, "Check connectivity to Confluent Cloud")
@@ -1482,30 +1473,30 @@ func runValidate(cmd *cobra.Command, args []string) error <span class="cov0" tit
         return nil</span>
 }
 
-func validateProjectStructure(projectDir string) error <span class="cov0" title="0">{
+func validateProjectStructure(projectDir string) error <span class="cov8" title="1">{
         requiredDirs := []string{"sql", "schemas", "config"}
         requiredFiles := []string{".pipegen.yaml"}
 
-        for _, dir := range requiredDirs </span><span class="cov0" title="0">{
+        for _, dir := range requiredDirs </span><span class="cov8" title="1">{
                 dirPath := filepath.Join(projectDir, dir)
-                if _, err := os.Stat(dirPath); os.IsNotExist(err) </span><span class="cov0" title="0">{
+                if _, err := os.Stat(dirPath); os.IsNotExist(err) </span><span class="cov8" title="1">{
                         return fmt.Errorf("required directory missing: %s", dir)
                 }</span>
-                <span class="cov0" title="0">fmt.Printf("✓ Directory exists: %s\n", dir)</span>
+                <span class="cov8" title="1">fmt.Printf("✓ Directory exists: %s\n", dir)</span>
         }
 
-        <span class="cov0" title="0">for _, file := range requiredFiles </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">for _, file := range requiredFiles </span><span class="cov8" title="1">{
                 filePath := filepath.Join(projectDir, file)
                 if _, err := os.Stat(filePath); os.IsNotExist(err) </span><span class="cov0" title="0">{
                         return fmt.Errorf("required file missing: %s", file)
                 }</span>
-                <span class="cov0" title="0">fmt.Printf("✓ File exists: %s\n", file)</span>
+                <span class="cov8" title="1">fmt.Printf("✓ File exists: %s\n", file)</span>
         }
 
-        <span class="cov0" title="0">return nil</span>
+        <span class="cov8" title="1">return nil</span>
 }
 
-func validateSQLFiles(projectDir string) error <span class="cov0" title="0">{
+func validateSQLFiles(projectDir string) error <span class="cov8" title="1">{
         sqlDir := filepath.Join(projectDir, "sql")
 
         entries, err := os.ReadDir(sqlDir)
@@ -1513,23 +1504,23 @@ func validateSQLFiles(projectDir string) error <span class="cov0" title="0">{
                 return fmt.Errorf("failed to read sql directory: %w", err)
         }</span>
 
-        <span class="cov0" title="0">sqlCount := 0
-        for _, entry := range entries </span><span class="cov0" title="0">{
-                if !entry.IsDir() &amp;&amp; strings.HasSuffix(entry.Name(), ".sql") </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">sqlCount := 0
+        for _, entry := range entries </span><span class="cov8" title="1">{
+                if !entry.IsDir() &amp;&amp; strings.HasSuffix(entry.Name(), ".sql") </span><span class="cov8" title="1">{
                         sqlCount++
                         fmt.Printf("✓ SQL file found: %s\n", entry.Name())
                 }</span>
         }
 
-        <span class="cov0" title="0">if sqlCount == 0 </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if sqlCount == 0 </span><span class="cov0" title="0">{
                 return fmt.Errorf("no SQL files found in sql/ directory")
         }</span>
 
-        <span class="cov0" title="0">fmt.Printf("✓ Found %d SQL files\n", sqlCount)
+        <span class="cov8" title="1">fmt.Printf("✓ Found %d SQL files\n", sqlCount)
         return nil</span>
 }
 
-func validateAVROSchemas(projectDir string) error <span class="cov0" title="0">{
+func validateAVROSchemas(projectDir string) error <span class="cov8" title="1">{
         schemaDir := filepath.Join(projectDir, "schemas")
 
         entries, err := os.ReadDir(schemaDir)
@@ -1537,19 +1528,19 @@ func validateAVROSchemas(projectDir string) error <span class="cov0" title="0">{
                 return fmt.Errorf("failed to read schemas directory: %w", err)
         }</span>
 
-        <span class="cov0" title="0">schemaCount := 0
-        for _, entry := range entries </span><span class="cov0" title="0">{
-                if !entry.IsDir() &amp;&amp; (strings.HasSuffix(entry.Name(), ".avsc") || strings.HasSuffix(entry.Name(), ".json")) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">schemaCount := 0
+        for _, entry := range entries </span><span class="cov8" title="1">{
+                if !entry.IsDir() &amp;&amp; (strings.HasSuffix(entry.Name(), ".avsc") || strings.HasSuffix(entry.Name(), ".json")) </span><span class="cov8" title="1">{
                         schemaCount++
                         fmt.Printf("✓ AVRO schema found: %s\n", entry.Name())
                 }</span>
         }
 
-        <span class="cov0" title="0">if schemaCount == 0 </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if schemaCount == 0 </span><span class="cov0" title="0">{
                 return fmt.Errorf("no AVRO schema files found in schemas/ directory")
         }</span>
 
-        <span class="cov0" title="0">fmt.Printf("✓ Found %d AVRO schema files\n", schemaCount)
+        <span class="cov8" title="1">fmt.Printf("✓ Found %d AVRO schema files\n", schemaCount)
         return nil</span>
 }
 </pre>
@@ -1593,7 +1584,7 @@ var versionCmd = &amp;cobra.Command{
         }</span>,
 }
 
-func init() <span class="cov0" title="0">{
+func init() <span class="cov8" title="1">{
         rootCmd.AddCommand(versionCmd)
 }</span>
 </pre>
@@ -1872,20 +1863,20 @@ type ExecutionReportGenerator struct {
 }
 
 // NewExecutionReportGenerator creates a new execution report generator
-func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, error) <span class="cov0" title="0">{
+func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, error) <span class="cov8" title="1">{
         templatePath := filepath.Join("internal", "templates", "files", "execution_report.html")
 
         // Load and encode logo
         logoPath := filepath.Join("web", "static", "logo.png")
         logoBase64 := ""
-        if _, err := os.Stat(logoPath); err == nil </span><span class="cov0" title="0">{
+        if _, err := os.Stat(logoPath); err == nil </span><span class="cov8" title="1">{
                 logoData, err := os.ReadFile(logoPath)
-                if err == nil </span><span class="cov0" title="0">{
+                if err == nil </span><span class="cov8" title="1">{
                         logoBase64 = base64.StdEncoding.EncodeToString(logoData)
                 }</span>
         }
 
-        <span class="cov0" title="0">return &amp;ExecutionReportGenerator{
+        <span class="cov8" title="1">return &amp;ExecutionReportGenerator{
                 outputDir:    outputDir,
                 templatePath: templatePath,
                 logoBase64:   logoBase64,
@@ -1943,26 +1934,26 @@ type ChartData struct {
 type ChartDataPoint = TimeSeriesPoint
 
 // GenerateReport creates an HTML execution report
-func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (string, error) <span class="cov0" title="0">{
+func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (string, error) <span class="cov8" title="1">{
         // Ensure output directory exists
         if err := os.MkdirAll(g.outputDir, 0755); err != nil </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("failed to create output directory: %w", err)
         }</span>
 
         // Load template
-        <span class="cov0" title="0">tmplContent, err := os.ReadFile(g.templatePath)
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">tmplContent, err := os.ReadFile(g.templatePath)
+        if err != nil </span><span class="cov8" title="1">{
                 return "", fmt.Errorf("failed to read template file: %w", err)
         }</span>
 
         // Parse template
-        <span class="cov0" title="0">tmpl, err := template.New("report").Parse(string(tmplContent))
+        <span class="cov8" title="1">tmpl, err := template.New("report").Parse(string(tmplContent))
         if err != nil </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("failed to parse template: %w", err)
         }</span>
 
         // Add logo to data
-        <span class="cov0" title="0">data.LogoBase64 = g.logoBase64
+        <span class="cov8" title="1">data.LogoBase64 = g.logoBase64
 
         // Generate timestamp for filename
         timestamp := time.Now().Format("20060102-150405")
@@ -1974,16 +1965,16 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
         if err != nil </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("failed to create report file: %w", err)
         }</span>
-        <span class="cov0" title="0">defer func() </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{
                 _ = file.Close() // Ignore close error in defer
         }</span>()
 
         // Execute template
-        <span class="cov0" title="0">if err := tmpl.Execute(file, data); err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if err := tmpl.Execute(file, data); err != nil </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("failed to execute template: %w", err)
         }</span>
 
-        <span class="cov0" title="0">return filePath, nil</span>
+        <span class="cov8" title="1">return filePath, nil</span>
 }
 </pre>
 		
@@ -5125,7 +5116,7 @@ type LLMService struct {
 }
 
 // NewLLMService creates a new LLM service (optional dependency)
-func NewLLMService() *LLMService <span class="cov0" title="0">{
+func NewLLMService() *LLMService <span class="cov8" title="1">{
         // Check for Ollama first (local, no API key needed)
         if ollamaURL := os.Getenv("PIPEGEN_OLLAMA_URL"); ollamaURL != "" </span><span class="cov0" title="0">{
                 model := os.Getenv("PIPEGEN_OLLAMA_MODEL")
@@ -5142,13 +5133,13 @@ func NewLLMService() *LLMService <span class="cov0" title="0">{
         }
 
         // Default to localhost Ollama if no URL specified
-        <span class="cov0" title="0">if _, exists := os.LookupEnv("PIPEGEN_OLLAMA_MODEL"); exists </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if _, exists := os.LookupEnv("PIPEGEN_OLLAMA_MODEL"); exists </span><span class="cov8" title="1">{
                 model := os.Getenv("PIPEGEN_OLLAMA_MODEL")
                 if model == "" </span><span class="cov0" title="0">{
                         model = "llama3.1"
                 }</span>
 
-                <span class="cov0" title="0">return &amp;LLMService{
+                <span class="cov8" title="1">return &amp;LLMService{
                         provider: ProviderOllama,
                         model:    model,
                         baseURL:  "http://localhost:11434",
@@ -5157,12 +5148,12 @@ func NewLLMService() *LLMService <span class="cov0" title="0">{
         }
 
         // Fall back to OpenAI
-        <span class="cov0" title="0">apiKey := os.Getenv("PIPEGEN_OPENAI_API_KEY")
-        if apiKey == "" </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">apiKey := os.Getenv("PIPEGEN_OPENAI_API_KEY")
+        if apiKey == "" </span><span class="cov8" title="1">{
                 return &amp;LLMService{enabled: false}
         }</span>
 
-        <span class="cov0" title="0">return &amp;LLMService{
+        <span class="cov8" title="1">return &amp;LLMService{
                 provider: ProviderOpenAI,
                 apiKey:   apiKey,
                 model:    getOpenAIModel(),
@@ -5172,12 +5163,12 @@ func NewLLMService() *LLMService <span class="cov0" title="0">{
 }
 
 // IsEnabled checks if LLM service is available
-func (s *LLMService) IsEnabled() bool <span class="cov0" title="0">{
+func (s *LLMService) IsEnabled() bool <span class="cov8" title="1">{
         return s.enabled
 }</span>
 
 // GetProvider returns the current LLM provider
-func (s *LLMService) GetProvider() LLMProvider <span class="cov0" title="0">{
+func (s *LLMService) GetProvider() LLMProvider <span class="cov8" title="1">{
         return s.provider
 }</span>
 
@@ -5191,8 +5182,8 @@ type GeneratedContent struct {
 }
 
 // GeneratePipeline creates pipeline components from natural language description
-func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain string) (*GeneratedContent, error) <span class="cov0" title="0">{
-        if !s.enabled </span><span class="cov0" title="0">{
+func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain string) (*GeneratedContent, error) <span class="cov8" title="1">{
+        if !s.enabled </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("LLM service not enabled. Set PIPEGEN_OPENAI_API_KEY or PIPEGEN_OLLAMA_MODEL environment variable")
         }</span>
 
@@ -5217,11 +5208,11 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
         <span class="cov0" title="0">return s.parseResponse(response)</span>
 }
 
-func getOpenAIModel() string <span class="cov0" title="0">{
+func getOpenAIModel() string <span class="cov8" title="1">{
         if model := os.Getenv("PIPEGEN_LLM_MODEL"); model != "" </span><span class="cov0" title="0">{
                 return model
         }</span>
-        <span class="cov0" title="0">return "gpt-4"</span> // Default OpenAI model
+        <span class="cov8" title="1">return "gpt-4"</span> // Default OpenAI model
 }
 
 func buildPrompt(description, domain string) string <span class="cov0" title="0">{
@@ -5318,12 +5309,12 @@ func (s *LLMService) callOpenAI(ctx context.Context, prompt string) (string, err
         return mockResponse, nil
 }</span>
 
-func (s *LLMService) parseResponse(response string) (*GeneratedContent, error) <span class="cov0" title="0">{
+func (s *LLMService) parseResponse(response string) (*GeneratedContent, error) <span class="cov8" title="1">{
         var content GeneratedContent
-        if err := json.Unmarshal([]byte(response), &amp;content); err != nil </span><span class="cov0" title="0">{
+        if err := json.Unmarshal([]byte(response), &amp;content); err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("failed to parse LLM response: %w", err)
         }</span>
-        <span class="cov0" title="0">return &amp;content, nil</span>
+        <span class="cov8" title="1">return &amp;content, nil</span>
 }
 </pre>
 		
@@ -5429,7 +5420,7 @@ type Consumer struct {
 }
 
 // NewConsumer creates a new Kafka consumer
-func NewConsumer(config *Config) (*Consumer, error) <span class="cov0" title="0">{
+func NewConsumer(config *Config) (*Consumer, error) <span class="cov8" title="1">{
         // For demo purposes, the consumer reads from the output-results topic
         // to demonstrate that the pipeline is processing messages correctly
         topicName := "output-results"
@@ -5651,7 +5642,7 @@ type FlinkDeployer struct {
 }
 
 // NewFlinkDeployer creates a new FlinkSQL deployer
-func NewFlinkDeployer(config *Config) *FlinkDeployer <span class="cov0" title="0">{
+func NewFlinkDeployer(config *Config) *FlinkDeployer <span class="cov8" title="1">{
         return &amp;FlinkDeployer{
                 config: config,
         }
@@ -5885,7 +5876,7 @@ type Producer struct {
 }
 
 // NewProducer creates a new Kafka producer
-func NewProducer(config *Config) (*Producer, error) <span class="cov0" title="0">{
+func NewProducer(config *Config) (*Producer, error) <span class="cov8" title="1">{
         writer := &amp;kafka.Writer{
                 Addr:         kafka.TCP(config.BootstrapServers),
                 Balancer:     &amp;kafka.LeastBytes{},
@@ -6114,7 +6105,7 @@ type ResourceManager struct {
 }
 
 // NewResourceManager creates a new resource manager
-func NewResourceManager(config *Config) *ResourceManager <span class="cov0" title="0">{
+func NewResourceManager(config *Config) *ResourceManager <span class="cov8" title="1">{
         return &amp;ResourceManager{
                 config: config,
         }
@@ -6319,7 +6310,7 @@ type Runner struct {
 }
 
 // NewRunner creates a new pipeline runner
-func NewRunner(config *Config) (*Runner, error) <span class="cov0" title="0">{
+func NewRunner(config *Config) (*Runner, error) <span class="cov8" title="1">{
         resourceMgr := NewResourceManager(config)
 
         producer, err := NewProducer(config)
@@ -6327,12 +6318,12 @@ func NewRunner(config *Config) (*Runner, error) <span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create producer: %w", err)
         }</span>
 
-        <span class="cov0" title="0">consumer, err := NewConsumer(config)
+        <span class="cov8" title="1">consumer, err := NewConsumer(config)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create consumer: %w", err)
         }</span>
 
-        <span class="cov0" title="0">flinkDeployer := NewFlinkDeployer(config)
+        <span class="cov8" title="1">flinkDeployer := NewFlinkDeployer(config)
         sqlLoader := NewSQLLoader(config.ProjectDir)
         schemaLoader := NewSchemaLoader(config.ProjectDir)
 
@@ -6348,23 +6339,23 @@ func NewRunner(config *Config) (*Runner, error) <span class="cov0" title="0">{
 }
 
 // SetDashboardServer sets the dashboard server for integration
-func (r *Runner) SetDashboardServer(dashboardServer interface{}) <span class="cov0" title="0">{
+func (r *Runner) SetDashboardServer(dashboardServer interface{}) <span class="cov8" title="1">{
         r.dashboardServer = dashboardServer
 }</span>
 
 // SetReportGenerator sets the report generator for execution reports
-func (r *Runner) SetReportGenerator(reportGenerator interface{}) <span class="cov0" title="0">{
+func (r *Runner) SetReportGenerator(reportGenerator interface{}) <span class="cov8" title="1">{
         r.reportGenerator = reportGenerator
 }</span>
 
 // generateExecutionID creates a unique execution ID
-func (r *Runner) generateExecutionID() string <span class="cov0" title="0">{
+func (r *Runner) generateExecutionID() string <span class="cov8" title="1">{
         bytes := make([]byte, 8)
         if _, err := rand.Read(bytes); err != nil </span><span class="cov0" title="0">{
                 // Fallback to timestamp-based ID if random read fails
                 return fmt.Sprintf("%x", time.Now().UnixNano())
         }</span>
-        <span class="cov0" title="0">return hex.EncodeToString(bytes)</span>
+        <span class="cov8" title="1">return hex.EncodeToString(bytes)</span>
 }
 
 // Run executes the complete pipeline
@@ -6641,7 +6632,7 @@ type SchemaLoader struct {
 }
 
 // NewSchemaLoader creates a new schema loader
-func NewSchemaLoader(projectDir string) *SchemaLoader <span class="cov0" title="0">{
+func NewSchemaLoader(projectDir string) *SchemaLoader <span class="cov8" title="1">{
         return &amp;SchemaLoader{
                 projectDir: projectDir,
         }
@@ -6924,7 +6915,7 @@ type SQLLoader struct {
 }
 
 // NewSQLLoader creates a new SQL loader
-func NewSQLLoader(projectDir string) *SQLLoader <span class="cov0" title="0">{
+func NewSQLLoader(projectDir string) *SQLLoader <span class="cov8" title="1">{
         return &amp;SQLLoader{
                 projectDir: projectDir,
         }
@@ -7159,20 +7150,20 @@ type Manager struct {
 }
 
 // NewManager creates a new template manager
-func NewManager() (*Manager, error) <span class="cov0" title="0">{
+func NewManager() (*Manager, error) <span class="cov8" title="1">{
         m := &amp;Manager{
                 templates: make(map[string]*template.Template),
         }
 
         // Create custom template functions
         funcMap := template.FuncMap{
-                "add": func(a, b int) int </span><span class="cov0" title="0">{
+                "add": func(a, b int) int </span><span class="cov8" title="1">{
                         return a + b
                 }</span>,
         }
 
         // Load templates
-        <span class="cov0" title="0">templatePaths := []struct {
+        <span class="cov8" title="1">templatePaths := []struct {
                 name string
                 path string
         }{
@@ -7186,35 +7177,35 @@ func NewManager() (*Manager, error) <span class="cov0" title="0">{
                 {"output_schema", "files/schemas/output.json"},
         }
 
-        for _, tp := range templatePaths </span><span class="cov0" title="0">{
+        for _, tp := range templatePaths </span><span class="cov8" title="1">{
                 content, err := templatesFS.ReadFile(tp.path)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, fmt.Errorf("failed to read template %s: %w", tp.name, err)
                 }</span>
 
-                <span class="cov0" title="0">tmpl, err := template.New(tp.name).Funcs(funcMap).Parse(string(content))
+                <span class="cov8" title="1">tmpl, err := template.New(tp.name).Funcs(funcMap).Parse(string(content))
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, fmt.Errorf("failed to parse template %s: %w", tp.name, err)
                 }</span>
 
-                <span class="cov0" title="0">m.templates[tp.name] = tmpl</span>
+                <span class="cov8" title="1">m.templates[tp.name] = tmpl</span>
         }
 
-        <span class="cov0" title="0">return m, nil</span>
+        <span class="cov8" title="1">return m, nil</span>
 }
 
 // RenderReadmeStandard renders the standard README template
-func (m *Manager) RenderReadmeStandard(data TemplateData) (string, error) <span class="cov0" title="0">{
+func (m *Manager) RenderReadmeStandard(data TemplateData) (string, error) <span class="cov8" title="1">{
         return m.render("readme_standard", data)
 }</span>
 
 // RenderReadmeLLM renders the LLM README template
-func (m *Manager) RenderReadmeLLM(data TemplateData) (string, error) <span class="cov0" title="0">{
+func (m *Manager) RenderReadmeLLM(data TemplateData) (string, error) <span class="cov8" title="1">{
         return m.render("readme_llm", data)
 }</span>
 
 // RenderDockerCompose renders the docker-compose template
-func (m *Manager) RenderDockerCompose(data TemplateData) (string, error) <span class="cov0" title="0">{
+func (m *Manager) RenderDockerCompose(data TemplateData) (string, error) <span class="cov8" title="1">{
         return m.render("docker_compose", data)
 }</span>
 
@@ -7244,55 +7235,55 @@ func (m *Manager) RenderOutputSchema(data TemplateData) (string, error) <span cl
 }</span>
 
 // RenderSQLFiles renders SQL templates from the SQL directory
-func (m *Manager) RenderSQLFiles(localMode bool) (map[string]string, error) <span class="cov0" title="0">{
+func (m *Manager) RenderSQLFiles(localMode bool) (map[string]string, error) <span class="cov8" title="1">{
         var sqlDir string
-        if localMode </span><span class="cov0" title="0">{
+        if localMode </span><span class="cov8" title="1">{
                 sqlDir = "files/sql/local"
-        }</span> else<span class="cov0" title="0"> {
+        }</span> else<span class="cov8" title="1"> {
                 sqlDir = "files/sql/cloud"
         }</span>
 
         // Read all SQL files from the directory
-        <span class="cov0" title="0">entries, err := templatesFS.ReadDir(sqlDir)
+        <span class="cov8" title="1">entries, err := templatesFS.ReadDir(sqlDir)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to read SQL directory %s: %w", sqlDir, err)
         }</span>
 
-        <span class="cov0" title="0">sqlTemplates := make(map[string]string)
-        for _, entry := range entries </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">sqlTemplates := make(map[string]string)
+        for _, entry := range entries </span><span class="cov8" title="1">{
                 if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") </span><span class="cov0" title="0">{
                         continue</span>
                 }
 
-                <span class="cov0" title="0">filePath := fmt.Sprintf("%s/%s", sqlDir, entry.Name())
+                <span class="cov8" title="1">filePath := fmt.Sprintf("%s/%s", sqlDir, entry.Name())
                 content, err := templatesFS.ReadFile(filePath)
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, fmt.Errorf("failed to read SQL file %s: %w", filePath, err)
                 }</span>
 
-                <span class="cov0" title="0">sqlTemplates[entry.Name()] = string(content)</span>
+                <span class="cov8" title="1">sqlTemplates[entry.Name()] = string(content)</span>
         }
 
-        <span class="cov0" title="0">return sqlTemplates, nil</span>
+        <span class="cov8" title="1">return sqlTemplates, nil</span>
 }
 
 // render executes a template with the given data
-func (m *Manager) render(templateName string, data TemplateData) (string, error) <span class="cov0" title="0">{
+func (m *Manager) render(templateName string, data TemplateData) (string, error) <span class="cov8" title="1">{
         tmpl, exists := m.templates[templateName]
         if !exists </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("template %s not found", templateName)
         }</span>
 
-        <span class="cov0" title="0">var buf bytes.Buffer
+        <span class="cov8" title="1">var buf bytes.Buffer
         if err := tmpl.Execute(&amp;buf, data); err != nil </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("failed to execute template %s: %w", templateName, err)
         }</span>
 
-        <span class="cov0" title="0">return buf.String(), nil</span>
+        <span class="cov8" title="1">return buf.String(), nil</span>
 }
 
 // SanitizeAVROIdentifier sanitizes a string for use as an AVRO identifier
-func SanitizeAVROIdentifier(name string) string <span class="cov0" title="0">{
+func SanitizeAVROIdentifier(name string) string <span class="cov8" title="1">{
         // Replace hyphens and other invalid characters with underscores
         sanitized := strings.ReplaceAll(name, "-", "_")
         sanitized = strings.ReplaceAll(sanitized, ".", "_")
@@ -7300,13 +7291,13 @@ func SanitizeAVROIdentifier(name string) string <span class="cov0" title="0">{
 
         // Remove any characters that aren't alphanumeric or underscores
         var result strings.Builder
-        for _, r := range sanitized </span><span class="cov0" title="0">{
-                if (r &gt;= 'a' &amp;&amp; r &lt;= 'z') || (r &gt;= 'A' &amp;&amp; r &lt;= 'Z') || (r &gt;= '0' &amp;&amp; r &lt;= '9') || r == '_' </span><span class="cov0" title="0">{
+        for _, r := range sanitized </span><span class="cov8" title="1">{
+                if (r &gt;= 'a' &amp;&amp; r &lt;= 'z') || (r &gt;= 'A' &amp;&amp; r &lt;= 'Z') || (r &gt;= '0' &amp;&amp; r &lt;= '9') || r == '_' </span><span class="cov8" title="1">{
                         result.WriteRune(r)
                 }</span>
         }
 
-        <span class="cov0" title="0">return result.String()</span>
+        <span class="cov8" title="1">return result.String()</span>
 }
 </pre>
 		
