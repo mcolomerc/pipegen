@@ -35,10 +35,8 @@ jobs:
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out ./...
       
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.out
+    - name: Generate coverage report
+      run: go tool cover -html=coverage.out -o coverage.html
 
   lint:
     name: Lint
