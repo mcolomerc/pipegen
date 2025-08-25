@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,6 +50,7 @@ func init() {
 	runCmd.Flags().Int("dashboard-port", 3000, "Dashboard server port")
 	runCmd.Flags().Bool("generate-report", true, "Generate HTML execution report")
 	runCmd.Flags().String("reports-dir", "", "Directory to save execution reports (default: project-dir/reports)")
+	runCmd.Flags().String("traffic-pattern", "", "Define traffic peaks: 'start-end:rate%,start-end:rate%' (e.g., '30s-60s:300%,90s-120s:200%')")
 }
 
 func runPipeline(cmd *cobra.Command, args []string) error {
@@ -61,10 +63,26 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	dashboardPort, _ := cmd.Flags().GetInt("dashboard-port")
 	generateReport, _ := cmd.Flags().GetBool("generate-report")
 	reportsDir, _ := cmd.Flags().GetString("reports-dir")
+	trafficPatternStr, _ := cmd.Flags().GetString("traffic-pattern")
 
 	// Validate configuration
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	// Parse traffic patterns if provided
+	var trafficPatterns *pipeline.TrafficPatterns
+	var err error
+	if trafficPatternStr != "" {
+		trafficPatterns, err = pipeline.ParseTrafficPattern(trafficPatternStr, messageRate)
+		if err != nil {
+			return fmt.Errorf("invalid traffic pattern: %w", err)
+		}
+
+		// Validate that patterns fit within the execution duration
+		if err := validateTrafficPatternDuration(trafficPatterns, duration); err != nil {
+			return fmt.Errorf("traffic pattern validation failed: %w", err)
+		}
 	}
 
 	config := &pipeline.Config{
@@ -79,6 +97,7 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		LocalMode:         viper.GetBool("local_mode"),
 		GenerateReport:    generateReport,
 		ReportsDir:        reportsDir,
+		TrafficPatterns:   trafficPatterns,
 	}
 
 	if dryRun {
@@ -151,7 +170,17 @@ func validateConfig() error {
 func showExecutionPlan(config *pipeline.Config) error {
 	fmt.Println("📋 Execution Plan:")
 	fmt.Printf("  Project Directory: %s\n", config.ProjectDir)
-	fmt.Printf("  Message Rate: %d msg/sec\n", config.MessageRate)
+
+	// Show traffic pattern information
+	if config.TrafficPatterns != nil && config.TrafficPatterns.HasPatterns() {
+		fmt.Println("  Traffic Pattern:")
+		for _, line := range strings.Split(config.TrafficPatterns.GetPatternSummary(), "\n") {
+			fmt.Printf("    %s\n", line)
+		}
+	} else {
+		fmt.Printf("  Message Rate: %d msg/sec (constant)\n", config.MessageRate)
+	}
+
 	fmt.Printf("  Duration: %v\n", config.Duration)
 	fmt.Printf("  Bootstrap Servers: %s\n", config.BootstrapServers)
 	fmt.Printf("  Schema Registry: %s\n", config.SchemaRegistryURL)
@@ -165,7 +194,13 @@ func showExecutionPlan(config *pipeline.Config) error {
 	fmt.Println("  4. Create Kafka topics")
 	fmt.Println("  5. Register AVRO schemas")
 	fmt.Println("  6. Deploy FlinkSQL statements")
-	fmt.Println("  7. Start Kafka producer")
+
+	if config.TrafficPatterns != nil && config.TrafficPatterns.HasPatterns() {
+		fmt.Println("  7. Start Kafka producer with dynamic traffic patterns")
+	} else {
+		fmt.Println("  7. Start Kafka producer with constant rate")
+	}
+
 	fmt.Println("  8. Start Kafka consumer")
 	fmt.Println("  9. Monitor pipeline execution")
 	if config.Cleanup {
@@ -287,4 +322,24 @@ func getReportsDir(config *pipeline.Config) string {
 		return config.ReportsDir
 	}
 	return filepath.Join(config.ProjectDir, "reports")
+}
+
+// validateTrafficPatternDuration ensures all traffic patterns fit within the execution duration
+func validateTrafficPatternDuration(patterns *pipeline.TrafficPatterns, duration time.Duration) error {
+	if patterns == nil || !patterns.HasPatterns() {
+		return nil
+	}
+
+	for i, pattern := range patterns.Patterns {
+		if pattern.EndTime > duration {
+			return fmt.Errorf("pattern %d ends at %v, which exceeds execution duration of %v",
+				i+1, pattern.EndTime, duration)
+		}
+		if pattern.StartTime >= duration {
+			return fmt.Errorf("pattern %d starts at %v, which is at or beyond execution duration of %v",
+				i+1, pattern.StartTime, duration)
+		}
+	}
+
+	return nil
 }

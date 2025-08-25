@@ -32,10 +32,15 @@ func NewProducer(config *Config) (*Producer, error) {
 	}, nil
 }
 
-// Start begins producing messages to the specified topic
+// Start begins producing messages to the specified topic with support for dynamic traffic patterns
 func (p *Producer) Start(ctx context.Context, topic string, schema *Schema) error {
 	fmt.Printf("📤 Starting producer for topic: %s\n", topic)
-	fmt.Printf("📊 Message rate: %d msg/sec\n", p.config.MessageRate)
+
+	if p.config.TrafficPatterns != nil && p.config.TrafficPatterns.HasPatterns() {
+		fmt.Printf("📊 Traffic pattern configured:\n%s\n", p.config.TrafficPatterns.GetPatternSummary())
+	} else {
+		fmt.Printf("📊 Message rate: %d msg/sec (constant)\n", p.config.MessageRate)
+	}
 
 	// Set topic for writer
 	p.writer.Topic = topic
@@ -47,6 +52,88 @@ func (p *Producer) Start(ctx context.Context, topic string, schema *Schema) erro
 	}
 	p.codec = codec
 
+	// Start the dynamic rate producer
+	if p.config.TrafficPatterns != nil && p.config.TrafficPatterns.HasPatterns() {
+		return p.startWithTrafficPatterns(ctx, schema)
+	}
+
+	// Fallback to constant rate producer
+	return p.startWithConstantRate(ctx, schema)
+}
+
+// startWithTrafficPatterns starts the producer with dynamic traffic patterns
+func (p *Producer) startWithTrafficPatterns(ctx context.Context, schema *Schema) error {
+	startTime := time.Now()
+	messageCount := 0
+	currentRate := p.config.TrafficPatterns.GetRateAt(0)
+
+	// Create a ticker that we'll reset when rate changes
+	interval := time.Second / time.Duration(currentRate)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Track rate changes for logging
+	lastLoggedRate := currentRate
+	nextRateCheck := time.Now().Add(100 * time.Millisecond) // Check rate every 100ms
+
+	fmt.Printf("📈 Starting with rate: %d msg/sec\n", currentRate)
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Printf("🛑 Producer stopping. Sent %d messages\n", messageCount)
+			return ctx.Err()
+
+		case <-ticker.C:
+			// Check if we need to update the rate
+			elapsed := time.Since(startTime)
+			newRate := p.config.TrafficPatterns.GetRateAt(elapsed)
+
+			if newRate != currentRate {
+				currentRate = newRate
+				interval = time.Second / time.Duration(currentRate)
+				ticker.Reset(interval)
+				fmt.Printf("📊 Rate changed to: %d msg/sec (elapsed: %v)\n", currentRate, elapsed.Truncate(time.Second))
+				lastLoggedRate = currentRate
+			}
+
+			// Generate and send message
+			if err := p.sendMessage(ctx, schema.Name, messageCount); err != nil {
+				fmt.Printf("⚠️  Failed to send message: %v\n", err)
+				continue
+			}
+
+			messageCount++
+			if messageCount%1000 == 0 {
+				fmt.Printf("📈 Sent %d messages (rate: %d msg/sec, elapsed: %v)...\n",
+					messageCount, currentRate, elapsed.Truncate(time.Second))
+			}
+
+		default:
+			// Periodic rate check (non-blocking)
+			if time.Now().After(nextRateCheck) {
+				elapsed := time.Since(startTime)
+				newRate := p.config.TrafficPatterns.GetRateAt(elapsed)
+
+				if newRate != currentRate {
+					currentRate = newRate
+					interval = time.Second / time.Duration(currentRate)
+					ticker.Reset(interval)
+
+					if newRate != lastLoggedRate {
+						fmt.Printf("📊 Rate changed to: %d msg/sec (elapsed: %v)\n", currentRate, elapsed.Truncate(time.Second))
+						lastLoggedRate = currentRate
+					}
+				}
+
+				nextRateCheck = time.Now().Add(100 * time.Millisecond)
+			}
+		}
+	}
+}
+
+// startWithConstantRate starts the producer with a constant message rate (original behavior)
+func (p *Producer) startWithConstantRate(ctx context.Context, schema *Schema) error {
 	// Calculate message interval
 	interval := time.Second / time.Duration(p.config.MessageRate)
 	ticker := time.NewTicker(interval)
@@ -62,27 +149,8 @@ func (p *Producer) Start(ctx context.Context, topic string, schema *Schema) erro
 
 		case <-ticker.C:
 			// Generate and send message
-			message, err := p.generateMessage(schema.Name, messageCount)
-			if err != nil {
-				fmt.Printf("⚠️  Failed to generate message: %v\n", err)
-				continue
-			}
-
-			// Encode message with AVRO
-			avroData, err := p.encodeMessage(message)
-			if err != nil {
-				fmt.Printf("⚠️  Failed to encode message: %v\n", err)
-				continue
-			}
-
-			// Send to Kafka
-			kafkaMsg := kafka.Message{
-				Key:   []byte(fmt.Sprintf("key-%d", messageCount)),
-				Value: avroData,
-			}
-
-			if err := p.writer.WriteMessages(ctx, kafkaMsg); err != nil {
-				fmt.Printf("⚠️  Failed to produce message: %v\n", err)
+			if err := p.sendMessage(ctx, schema.Name, messageCount); err != nil {
+				fmt.Printf("⚠️  Failed to send message: %v\n", err)
 				continue
 			}
 
@@ -92,6 +160,33 @@ func (p *Producer) Start(ctx context.Context, topic string, schema *Schema) erro
 			}
 		}
 	}
+}
+
+// sendMessage generates and sends a single message (extracted for reuse)
+func (p *Producer) sendMessage(ctx context.Context, schemaName string, messageCount int) error {
+	// Generate message
+	message, err := p.generateMessage(schemaName, messageCount)
+	if err != nil {
+		return fmt.Errorf("failed to generate message: %w", err)
+	}
+
+	// Encode message with AVRO
+	avroData, err := p.encodeMessage(message)
+	if err != nil {
+		return fmt.Errorf("failed to encode message: %w", err)
+	}
+
+	// Send to Kafka
+	kafkaMsg := kafka.Message{
+		Key:   []byte(fmt.Sprintf("key-%d", messageCount)),
+		Value: avroData,
+	}
+
+	if err := p.writer.WriteMessages(ctx, kafkaMsg); err != nil {
+		return fmt.Errorf("failed to produce message: %w", err)
+	}
+
+	return nil
 }
 
 // generateMessage creates sample data based on the schema

@@ -156,6 +156,7 @@ Executes the complete streaming pipeline:
 - `--project-dir` - Project directory (default: ".")
 - `--message-rate` - Messages per second (default: 100)
 - `--duration` - Pipeline runtime (default: 5m)
+- `--traffic-pattern` - Define traffic peaks: 'start-end:rate%,start-end:rate%' (e.g., '30s-60s:300%,90s-120s:200%')
 - `--cleanup` - Clean up resources after run (default: true)
 - `--dry-run` - Show execution plan without running
 - `--dashboard` - Start live dashboard during pipeline execution
@@ -166,6 +167,18 @@ Executes the complete streaming pipeline:
 # Basic pipeline execution
 pipegen run
 
+# Constant rate execution
+pipegen run --message-rate 100 --duration 5m
+
+# High-throughput test
+pipegen run --message-rate 1000 --duration 10m
+
+# Simulate traffic peaks - 300% spike from 30s-60s, then 200% spike from 90s-120s
+pipegen run --message-rate 100 --duration 5m --traffic-pattern "30s-60s:300%,90s-120s:200%"
+
+# Multiple traffic spikes for stress testing
+pipegen run --message-rate 50 --duration 10m --traffic-pattern "1m-2m:400%,5m-6m:300%,8m-9m:500%"
+
 # Run with live dashboard monitoring
 pipegen run --dashboard
 
@@ -174,6 +187,38 @@ pipegen run --message-rate 1000 --duration 10m --dashboard
 
 # Custom dashboard port
 pipegen run --dashboard --dashboard-port 8080
+```
+
+#### Traffic Patterns
+
+The `--traffic-pattern` flag allows you to simulate realistic traffic spikes during pipeline execution, perfect for load testing and performance validation.
+
+**Pattern Format:** `"start-end:rate%,start-end:rate%"`
+- `start-end`: Time range (e.g., `30s-60s`, `1m-2m`)
+- `rate%`: Message rate multiplier (e.g., `300%` = 3x base rate)
+
+**Key Features:**
+- **Dynamic rate adjustment**: Seamlessly transitions between base rate and peak rates
+- **Multiple peaks**: Define multiple traffic spikes in a single execution
+- **Validation**: Ensures patterns don't overlap and fit within execution duration
+- **Realistic simulation**: Perfect for testing autoscaling, backpressure handling, and system limits
+
+**Use Cases:**
+- **Black Friday simulation**: Model traffic spikes during high-demand periods
+- **Stress testing**: Test system behavior under sudden load increases
+- **Capacity planning**: Understand how your pipeline handles traffic bursts
+- **Autoscaling validation**: Verify that your infrastructure scales appropriately
+
+**Examples:**
+```bash
+# Single traffic spike: 3x rate from 30s to 60s
+pipegen run --message-rate 100 --traffic-pattern "30s-60s:300%"
+
+# Multiple spikes: 4x at 1-2min, 3x at 5-6min, 5x at 8-9min
+pipegen run --message-rate 50 --traffic-pattern "1m-2m:400%,5m-6m:300%,8m-9m:500%"
+
+# Gradual load increase
+pipegen run --message-rate 100 --traffic-pattern "1m-2m:200%,3m-4m:300%,5m-6m:400%"
 ```
 
 ### `pipegen validate`

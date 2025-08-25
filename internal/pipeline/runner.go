@@ -21,8 +21,9 @@ type Config struct {
 	FlinkURL          string
 	SchemaRegistryURL string
 	LocalMode         bool
-	GenerateReport    bool   // New field to enable report generation
-	ReportsDir        string // Directory to save reports
+	GenerateReport    bool             // New field to enable report generation
+	ReportsDir        string           // Directory to save reports
+	TrafficPatterns   *TrafficPatterns // Traffic patterns for dynamic rate changes
 }
 
 // Runner orchestrates the complete pipeline execution
