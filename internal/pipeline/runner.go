@@ -80,7 +80,10 @@ func (r *Runner) SetReportGenerator(reportGenerator interface{}) {
 // generateExecutionID creates a unique execution ID
 func (r *Runner) generateExecutionID() string {
 	bytes := make([]byte, 8)
-	rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to timestamp-based ID if random read fails
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
 	return hex.EncodeToString(bytes)
 }
 

@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -27,7 +26,7 @@ func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, e
 	logoPath := filepath.Join("web", "static", "logo.png")
 	logoBase64 := ""
 	if _, err := os.Stat(logoPath); err == nil {
-		logoData, err := ioutil.ReadFile(logoPath)
+		logoData, err := os.ReadFile(logoPath)
 		if err == nil {
 			logoBase64 = base64.StdEncoding.EncodeToString(logoData)
 		}
@@ -98,7 +97,7 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	}
 	
 	// Load template
-	tmplContent, err := ioutil.ReadFile(g.templatePath)
+	tmplContent, err := os.ReadFile(g.templatePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
@@ -122,7 +121,9 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	if err != nil {
 		return "", fmt.Errorf("failed to create report file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close() // Ignore close error in defer
+	}()
 	
 	// Execute template
 	if err := tmpl.Execute(file, data); err != nil {

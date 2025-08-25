@@ -13,7 +13,6 @@ type ExecutionDataCollector struct {
 	startTime       time.Time
 	parameters      ExecutionParameters
 	metrics         ExecutionMetrics
-	chartData       ChartData
 	status          string
 	mutex           sync.RWMutex
 	dataPoints      []TimeSeriesPoint
@@ -192,18 +191,6 @@ func (c *ExecutionDataCollector) addThroughputPoint(timestamp time.Time, value f
 	// Keep only last 100 points
 	if len(c.throughputData) > 100 {
 		c.throughputData = c.throughputData[1:]
-	}
-}
-
-// buildSummary creates execution summary
-func (c *ExecutionDataCollector) buildSummary() ExecutionSummary {
-	return ExecutionSummary{
-		TotalMessagesProcessed: c.metrics.TotalMessages,
-		TotalBytesProcessed:   c.metrics.BytesProcessed,
-		ThroughputMsgSec:      c.metrics.MessagesPerSecond,
-		ErrorRate:             float64(c.metrics.ErrorCount) / float64(c.metrics.TotalMessages) * 100.0,
-		SuccessRate:           c.metrics.SuccessRate,
-		AverageLatency:        c.metrics.AvgLatency,
 	}
 }
 

@@ -98,7 +98,10 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 
 	// Set up report generation if enabled
 	if config.GenerateReport {
-		reportGenerator := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		reportGenerator, err := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		if err != nil {
+			return fmt.Errorf("failed to create report generator: %w", err)
+		}
 		runner.SetReportGenerator(reportGenerator)
 	}
 
@@ -210,7 +213,10 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 
 	// Set up report generation if enabled
 	if config.GenerateReport {
-		reportGenerator := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		reportGenerator, err := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		if err != nil {
+			return fmt.Errorf("failed to create report generator: %w", err)
+		}
 		runner.SetReportGenerator(reportGenerator)
 	}
 
