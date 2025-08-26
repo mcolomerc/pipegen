@@ -10,6 +10,11 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+  packages: write
+  pull-requests: read
+
 env:
   GO_VERSION: '1.20'
 
@@ -243,7 +248,7 @@ jobs:
         sha256sum * > checksums.txt
         
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.version }}
         name: "Release ${{ steps.version.outputs.version }}"
@@ -252,8 +257,8 @@ jobs:
         prerelease: ${{ contains(steps.version.outputs.version, '-') }}
         files: |
           release-assets/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        fail_on_unmatched_files: true
+        generate_release_notes: true
         
     - name: Update release notes
       run: |
