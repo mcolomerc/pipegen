@@ -4,7 +4,7 @@ set -e
 # PipeGen Installation Script
 # Usage: curl -sSL https://raw.githubusercontent.com/owner/pipegen/main/install.sh | bash
 
-REPO="owner/pipegen"
+REPO="mcolomerc/pipegen"
 BINARY_NAME="pipegen"
 INSTALL_DIR="/usr/local/bin"
 
