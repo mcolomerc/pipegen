@@ -4,6 +4,21 @@ layout: home
 hero:
   name: "PipeGen"
   text: "Streaming Data Pipeline Generator"
+  tagline: "Create and manage streaming data pipelines using Apache Kafka and FlinkSQL with AI-powered generation and real-time monitoring."
+  image:
+    src: /logo.png
+    alt: PipeGen Logo
+  actions:
+    - theme: brand
+      text: Get Started
+      link: /getting-started
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/mcolomerc/pipegen
+
+features:ero:
+  name: "PipeGen"
+  text: "Streaming Data Pipeline Generator"
   tagline: "Create and manage Apache Kafka + FlinkSQL pipelines with AI-powered generation and real-time monitoring"
   image:
     src: /logo.png
@@ -48,6 +63,18 @@ features:
   - title: "Execution Reports"
     details: Generate detailed HTML reports with charts, metrics, and pipeline diagrams for analysis.
     link: /dashboard#reports
+---
+
+## <i class="fas fa-info-circle"></i> Version Information
+
+<div class="info-box success">
+  <div class="icon"><i class="fas fa-tag"></i></div>
+  <div>
+    <h3>Current Version: 1.0.0</h3>
+    <p>This is the latest stable release with full feature support including traffic patterns, AI generation, and real-time monitoring. <a href="/changelog">View changelog →</a></p>
+  </div>
+</div>
+
 ---
 
 <div class="custom-container">

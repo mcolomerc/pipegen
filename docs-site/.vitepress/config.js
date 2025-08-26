@@ -28,12 +28,13 @@ export default defineConfig({
       { text: 'Features', link: '/features' },
       { text: 'Examples', link: '/examples' },
       {
-        text: 'More',
+        text: 'v1.0.0',
         items: [
           { text: 'Configuration', link: '/configuration' },
           { text: 'Traffic Patterns', link: '/traffic-patterns' },
           { text: 'Dashboard', link: '/dashboard' },
-          { text: 'AI Generation', link: '/ai-generation' }
+          { text: 'AI Generation', link: '/ai-generation' },
+          { text: 'Changelog', link: '/changelog' }
         ]
       }
     ],

@@ -305,7 +305,7 @@ div[class*='language-']:before {
 }
 
 .VPFeatures .VPFeature:nth-child(2) .title::before {
-  content: "\f544"; /* fa-robot - AI-Powered Generation */
+  content: "\f9c2"; /* fa-brain - AI-Powered Generation */
 }
 
 .VPFeatures .VPFeature:nth-child(3) .title::before {
@@ -313,16 +313,15 @@ div[class*='language-']:before {
 }
 
 .VPFeatures .VPFeature:nth-child(4) .title::before {
-  content: "\f395"; /* fa-docker - Local Development Stack */
-  font-family: "Font Awesome 6 Brands";
+  content: "\f5fc"; /* fa-laptop-code - Local Development Stack */
 }
 
 .VPFeatures .VPFeature:nth-child(5) .title::before {
-  content: "\f3fd"; /* fa-tachometer-alt - Real-time Monitoring */
+  content: "\f080"; /* fa-chart-bar - Real-time Monitoring */
 }
 
 .VPFeatures .VPFeature:nth-child(6) .title::before {
-  content: "\f02c"; /* fa-tags - Dynamic Resource Management */
+  content: "\f085"; /* fa-cogs - Dynamic Resource Management */
 }
 
 .VPFeatures .VPFeature:nth-child(7) .title::before {
