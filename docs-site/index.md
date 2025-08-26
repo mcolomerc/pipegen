@@ -65,18 +65,6 @@ features:
     link: /dashboard#reports
 ---
 
-## <i class="fas fa-info-circle"></i> Version Information
-
-<div class="info-box success">
-  <div class="icon"><i class="fas fa-tag"></i></div>
-  <div>
-    <h3>Current Version: 1.0.0</h3>
-    <p>This is the latest stable release with full feature support including traffic patterns, AI generation, and real-time monitoring. <a href="/changelog">View changelog →</a></p>
-  </div>
-</div>
-
----
-
 <div class="custom-container">
 
 ## Why PipeGen?
