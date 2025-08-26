@@ -126,7 +126,17 @@ install_binary() {
     fi
     
     # Find the binary in the extracted files
-    EXTRACTED_BINARY=$(find . -name "$BINARY_NAME" -type f | head -1)
+    # First try to find the platform-specific binary name
+    EXTRACTED_BINARY=$(find . -name "${BINARY_NAME%.*}-${PLATFORM}" -type f | head -1)
+    # If not found, try to find just the binary name
+    if [ -z "$EXTRACTED_BINARY" ]; then
+        EXTRACTED_BINARY=$(find . -name "$BINARY_NAME" -type f | head -1)
+    fi
+    # If still not found, try any executable file
+    if [ -z "$EXTRACTED_BINARY" ]; then
+        EXTRACTED_BINARY=$(find . -type f -executable | grep -E "(pipegen|${BINARY_NAME})" | head -1)
+    fi
+    
     if [ -z "$EXTRACTED_BINARY" ]; then
         log_error "Binary not found in archive"
     fi
