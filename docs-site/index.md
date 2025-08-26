@@ -20,49 +20,49 @@ features:
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fas fa-rocket" style="color: #2196F3;"></i> Quick Project Scaffolding
+    title: "Quick Project Scaffolding"
     details: Generate complete pipeline projects with SQL statements, AVRO schemas, and Docker Compose setup in seconds.
     
   - icon:
       dark: /logo.png  
       light: /logo.png
-    title: <i class="fas fa-robot" style="color: #2196F3;"></i> AI-Powered Generation
+    title: "AI-Powered Generation"
     details: Describe your pipeline in natural language and let AI create optimized FlinkSQL statements and schemas.
     
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fas fa-chart-line" style="color: #2196F3;"></i> Dynamic Traffic Patterns
+    title: "Dynamic Traffic Patterns"
     details: Simulate realistic traffic spikes and load patterns for comprehensive testing and capacity planning.
     
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fab fa-docker" style="color: #2196F3;"></i> Local Development Stack
+    title: "Local Development Stack"
     details: Complete Docker-based development environment with Kafka, Flink, and Schema Registry.
     
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fas fa-tachometer-alt" style="color: #2196F3;"></i> Real-time Monitoring
+    title: "Real-time Monitoring"
     details: Live dashboard with WebSocket-based metrics, pipeline visualization, and performance analytics.
     
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fas fa-tags" style="color: #2196F3;"></i> Dynamic Resource Management
+    title: "Dynamic Resource Management"
     details: Automatic topic naming, schema registration, and cleanup to avoid conflicts in shared environments.
     
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fas fa-check-circle" style="color: #2196F3;"></i> Comprehensive Validation
+    title: "Comprehensive Validation"
     details: Validate project structure, SQL syntax, AVRO schemas, and connectivity before deployment.
     
   - icon:
       dark: /logo.png
       light: /logo.png
-    title: <i class="fas fa-file-alt" style="color: #2196F3;"></i> Execution Reports
+    title: "Execution Reports"
     details: Generate detailed HTML reports with charts, metrics, and pipeline diagrams for analysis.
 ---
 

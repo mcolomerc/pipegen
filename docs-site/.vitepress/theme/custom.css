@@ -290,3 +290,44 @@ div[class*='language-']:before {
 .VPFeatures .VPFeature:hover::before {
   opacity: 1;
 }
+
+/* Feature titles with icons */
+.VPFeatures .VPFeature .title::before {
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands";
+  font-weight: 900;
+  color: var(--vp-c-brand-1);
+  margin-right: 8px;
+}
+
+.VPFeatures .VPFeature:nth-child(1) .title::before {
+  content: "\f135"; /* fa-rocket */
+}
+
+.VPFeatures .VPFeature:nth-child(2) .title::before {
+  content: "\f544"; /* fa-robot */
+}
+
+.VPFeatures .VPFeature:nth-child(3) .title::before {
+  content: "\f201"; /* fa-chart-line */
+}
+
+.VPFeatures .VPFeature:nth-child(4) .title::before {
+  content: "\f395"; /* fa-docker */
+  font-family: "Font Awesome 6 Brands";
+}
+
+.VPFeatures .VPFeature:nth-child(5) .title::before {
+  content: "\f3fd"; /* fa-tachometer-alt */
+}
+
+.VPFeatures .VPFeature:nth-child(6) .title::before {
+  content: "\f02c"; /* fa-tags */
+}
+
+.VPFeatures .VPFeature:nth-child(7) .title::before {
+  content: "\f058"; /* fa-check-circle */
+}
+
+.VPFeatures .VPFeature:nth-child(8) .title::before {
+  content: "\f15c"; /* fa-file-alt */
+}
