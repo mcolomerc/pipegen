@@ -282,5 +282,9 @@ jobs:
         homebrew-tap: ${{ github.repository_owner }}/homebrew-tap
         base-branch: main
         download-url: "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/pipegen-darwin-amd64.tar.gz"
+        commit-message: |
+          {{formulaName}} {{version}}
+          
+          Created by https://github.com/mislav/bump-homebrew-formula-action
       env:
-        COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        COMMITTER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
