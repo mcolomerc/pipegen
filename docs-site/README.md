@@ -18,7 +18,7 @@ npm install
 npm run dev
 ```
 
-Visit http://localhost:5173/pipegen/ to see the site.
+The development server will start on port 5173 at `/pipegen/` path.
 
 ### Build
 ```bash
