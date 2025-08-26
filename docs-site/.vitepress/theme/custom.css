@@ -1,30 +1,52 @@
 :root {
-  --vp-c-brand-1: #4CAF50;
-  --vp-c-brand-2: #45A049;
-  --vp-c-brand-3: #3E8E41;
-  --vp-c-brand-soft: rgba(76, 175, 80, 0.14);
-  --vp-c-brand-softer: rgba(76, 175, 80, 0.07);
-  --vp-c-brand-softest: rgba(76, 175, 80, 0.04);
+  /* Updated brand colors - using a more professional blue-teal palette */
+  --vp-c-brand-1: #2196F3;
+  --vp-c-brand-2: #1976D2;
+  --vp-c-brand-3: #0D47A1;
+  --vp-c-brand-soft: rgba(33, 150, 243, 0.14);
+  --vp-c-brand-softer: rgba(33, 150, 243, 0.07);
+  --vp-c-brand-softest: rgba(33, 150, 243, 0.04);
+  
+  /* Accent colors */
+  --vp-c-accent-1: #00BCD4;
+  --vp-c-accent-2: #0097A7;
+  --vp-c-accent-3: #006064;
 }
 
 .dark {
-  --vp-c-brand-1: #66BB6A;
-  --vp-c-brand-2: #4CAF50;
-  --vp-c-brand-3: #43A047;
-  --vp-c-brand-soft: rgba(102, 187, 106, 0.16);
-  --vp-c-brand-softer: rgba(102, 187, 106, 0.08);
-  --vp-c-brand-softest: rgba(102, 187, 106, 0.04);
+  --vp-c-brand-1: #42A5F5;
+  --vp-c-brand-2: #2196F3;
+  --vp-c-brand-3: #1976D2;
+  --vp-c-brand-soft: rgba(66, 165, 245, 0.16);
+  --vp-c-brand-softer: rgba(66, 165, 245, 0.08);
+  --vp-c-brand-softest: rgba(66, 165, 245, 0.04);
+  
+  /* Accent colors for dark mode */
+  --vp-c-accent-1: #26C6DA;
+  --vp-c-accent-2: #00BCD4;
+  --vp-c-accent-3: #0097A7;
+}
+
+/* Make logo larger in header */
+.VPNavBarTitle .logo {
+  width: 40px !important;
+  height: 40px !important;
+  transition: transform 0.3s ease;
+}
+
+.VPNavBarTitle:hover .logo {
+  transform: scale(1.1) rotate(5deg);
 }
 
 /* Custom hero section */
 .VPHero .title {
-  background: linear-gradient(120deg, var(--vp-c-brand-1) 30%, #42A5F5);
+  background: linear-gradient(120deg, var(--vp-c-brand-1) 30%, var(--vp-c-accent-1));
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-/* Feature cards styling */
+/* Feature cards styling with updated colors */
 .VPFeature {
   border: 1px solid var(--vp-c-border);
   border-radius: 12px;
@@ -34,7 +56,7 @@
 
 .VPFeature:hover {
   border-color: var(--vp-c-brand-1);
-  box-shadow: 0 8px 32px rgba(76, 175, 80, 0.15);
+  box-shadow: 0 8px 32px rgba(33, 150, 243, 0.15);
   transform: translateY(-2px);
 }
 
@@ -136,4 +158,135 @@ div[class*='language-']:before {
 
 .VPImage:hover {
   opacity: 0.9;
+}
+
+/* FontAwesome icon styling */
+.fa-icon {
+  margin-right: 8px;
+  color: var(--vp-c-brand-1);
+}
+
+.fa-icon.large {
+  font-size: 1.5em;
+  margin-right: 12px;
+}
+
+/* Custom button styles with icons */
+.custom-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(45deg, var(--vp-c-brand-1), var(--vp-c-accent-1));
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.custom-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(33, 150, 243, 0.3);
+  text-decoration: none;
+  color: white;
+}
+
+/* Feature grid improvements */
+.VPFeatures .VPFeature .icon {
+  font-size: 2.5rem;
+  color: var(--vp-c-brand-1);
+  margin-bottom: 16px;
+}
+
+/* Navigation improvements */
+.VPNavBar .title {
+  font-weight: 700;
+  font-size: 1.2em;
+}
+
+/* Custom info boxes with icons */
+.info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--vp-c-brand-softest);
+  border-left: 4px solid var(--vp-c-brand-1);
+  margin: 20px 0;
+}
+
+.info-box .icon {
+  color: var(--vp-c-brand-1);
+  font-size: 1.5em;
+  margin-top: 2px;
+}
+
+.info-box.warning {
+  background: rgba(255, 152, 0, 0.08);
+  border-left-color: #ff9800;
+}
+
+.info-box.warning .icon {
+  color: #ff9800;
+}
+
+.info-box.success {
+  background: rgba(76, 175, 80, 0.08);
+  border-left-color: #4CAF50;
+}
+
+.info-box.success .icon {
+  color: #4CAF50;
+}
+
+.info-box.error {
+  background: rgba(244, 67, 54, 0.08);
+  border-left-color: #f44336;
+}
+
+.info-box.error .icon {
+  color: #f44336;
+}
+
+/* Improve hero action buttons */
+.VPHero .actions .action::before {
+  margin-right: 8px;
+}
+
+.VPHero .actions .action.brand::before {
+  content: "🚀";
+}
+
+.VPHero .actions .action.alt::before {
+  content: "⭐";
+}
+
+/* Enhanced feature cards */
+.VPFeatures {
+  padding-top: 48px;
+}
+
+.VPFeatures .VPFeature {
+  position: relative;
+  overflow: hidden;
+}
+
+.VPFeatures .VPFeature::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--vp-c-brand-1), var(--vp-c-accent-1));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.VPFeatures .VPFeature:hover::before {
+  opacity: 1;
 }

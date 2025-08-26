@@ -17,36 +17,52 @@ hero:
       link: https://github.com/mcolomerc/pipegen
 
 features:
-  - icon: 🚀
-    title: Quick Project Scaffolding
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fas fa-rocket" style="color: #2196F3;"></i> Quick Project Scaffolding
     details: Generate complete pipeline projects with SQL statements, AVRO schemas, and Docker Compose setup in seconds.
     
-  - icon: 🤖
-    title: AI-Powered Generation
+  - icon:
+      dark: /logo.png  
+      light: /logo.png
+    title: <i class="fas fa-robot" style="color: #2196F3;"></i> AI-Powered Generation
     details: Describe your pipeline in natural language and let AI create optimized FlinkSQL statements and schemas.
     
-  - icon: 📊
-    title: Dynamic Traffic Patterns
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fas fa-chart-line" style="color: #2196F3;"></i> Dynamic Traffic Patterns
     details: Simulate realistic traffic spikes and load patterns for comprehensive testing and capacity planning.
     
-  - icon: 🐳
-    title: Local Development Stack
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fab fa-docker" style="color: #2196F3;"></i> Local Development Stack
     details: Complete Docker-based development environment with Kafka, Flink, and Schema Registry.
     
-  - icon: 📈
-    title: Real-time Monitoring
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fas fa-tachometer-alt" style="color: #2196F3;"></i> Real-time Monitoring
     details: Live dashboard with WebSocket-based metrics, pipeline visualization, and performance analytics.
     
-  - icon: 🏷️
-    title: Dynamic Resource Management
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fas fa-tags" style="color: #2196F3;"></i> Dynamic Resource Management
     details: Automatic topic naming, schema registration, and cleanup to avoid conflicts in shared environments.
     
-  - icon: ✅
-    title: Comprehensive Validation
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fas fa-check-circle" style="color: #2196F3;"></i> Comprehensive Validation
     details: Validate project structure, SQL syntax, AVRO schemas, and connectivity before deployment.
     
-  - icon: 📄
-    title: Execution Reports
+  - icon:
+      dark: /logo.png
+      light: /logo.png
+    title: <i class="fas fa-file-alt" style="color: #2196F3;"></i> Execution Reports
     details: Generate detailed HTML reports with charts, metrics, and pipeline diagrams for analysis.
 ---
 
@@ -56,11 +72,40 @@ features:
 
 Building streaming data pipelines traditionally requires deep knowledge of Apache Kafka, FlinkSQL, AVRO schemas, and complex deployment configurations. **PipeGen eliminates this complexity** by providing:
 
-- **🎯 Zero-config local development** - Complete stack with one command
-- **🧠 AI-assisted pipeline creation** - Natural language to production-ready code
-- **📊 Realistic testing capabilities** - Traffic pattern simulation for load testing
-- **👀 Real-time visibility** - Live monitoring and comprehensive reporting
-- **🔄 DevOps-ready workflows** - Automated deployment and cleanup
+<div class="info-box">
+  <i class="fas fa-bullseye icon"></i>
+  <div>
+    <strong>Zero-config local development</strong> - Complete stack with one command
+  </div>
+</div>
+
+<div class="info-box">
+  <i class="fas fa-brain icon"></i>
+  <div>
+    <strong>AI-assisted pipeline creation</strong> - Natural language to production-ready code
+  </div>
+</div>
+
+<div class="info-box">
+  <i class="fas fa-chart-area icon"></i>
+  <div>
+    <strong>Realistic testing capabilities</strong> - Traffic pattern simulation for load testing
+  </div>
+</div>
+
+<div class="info-box">
+  <i class="fas fa-eye icon"></i>
+  <div>
+    <strong>Real-time visibility</strong> - Live monitoring and comprehensive reporting
+  </div>
+</div>
+
+<div class="info-box">
+  <i class="fas fa-sync-alt icon"></i>
+  <div>
+    <strong>DevOps-ready workflows</strong> - Automated deployment and cleanup
+  </div>
+</div>
 
 </div>
 
@@ -109,22 +154,22 @@ The integrated dashboard provides real-time visibility into your streaming pipel
 
 <div class="grid-2">
   <div class="grid-item">
-    <h3>🏢 Enterprises</h3>
+    <h3><i class="fas fa-building fa-icon"></i>Enterprises</h3>
     <ul>
-      <li>Rapid prototyping of streaming solutions</li>
-      <li>Load testing and capacity planning</li>
-      <li>Training and onboarding new team members</li>
-      <li>Standardized pipeline templates</li>
+      <li><i class="fas fa-rocket fa-icon"></i>Rapid prototyping of streaming solutions</li>
+      <li><i class="fas fa-weight-hanging fa-icon"></i>Load testing and capacity planning</li>
+      <li><i class="fas fa-graduation-cap fa-icon"></i>Training and onboarding new team members</li>
+      <li><i class="fas fa-layer-group fa-icon"></i>Standardized pipeline templates</li>
     </ul>
   </div>
   
   <div class="grid-item">
-    <h3>👨‍💻 Developers</h3>
+    <h3><i class="fas fa-code fa-icon"></i>Developers</h3>
     <ul>
-      <li>Learn Kafka and FlinkSQL hands-on</li>
-      <li>Test streaming concepts locally</li>
-      <li>Validate pipeline logic before production</li>
-      <li>Generate boilerplate code quickly</li>
+      <li><i class="fas fa-hands-helping fa-icon"></i>Learn Kafka and FlinkSQL hands-on</li>
+      <li><i class="fas fa-flask fa-icon"></i>Test streaming concepts locally</li>
+      <li><i class="fas fa-shield-alt fa-icon"></i>Validate pipeline logic before production</li>
+      <li><i class="fas fa-magic fa-icon"></i>Generate boilerplate code quickly</li>
     </ul>
   </div>
 </div>

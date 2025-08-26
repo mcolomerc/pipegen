@@ -7,6 +7,7 @@ export default defineConfig({
   
   head: [
     ['link', { rel: 'icon', href: '/pipegen/favicon.ico' }],
+    ['link', { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'PipeGen - Streaming Data Pipeline Generator' }],
     ['meta', { property: 'og:description', content: 'Create and manage streaming data pipelines using Apache Kafka and FlinkSQL with AI-powered generation and real-time monitoring.' }],
