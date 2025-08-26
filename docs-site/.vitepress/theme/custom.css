@@ -1,0 +1,139 @@
+:root {
+  --vp-c-brand-1: #4CAF50;
+  --vp-c-brand-2: #45A049;
+  --vp-c-brand-3: #3E8E41;
+  --vp-c-brand-soft: rgba(76, 175, 80, 0.14);
+  --vp-c-brand-softer: rgba(76, 175, 80, 0.07);
+  --vp-c-brand-softest: rgba(76, 175, 80, 0.04);
+}
+
+.dark {
+  --vp-c-brand-1: #66BB6A;
+  --vp-c-brand-2: #4CAF50;
+  --vp-c-brand-3: #43A047;
+  --vp-c-brand-soft: rgba(102, 187, 106, 0.16);
+  --vp-c-brand-softer: rgba(102, 187, 106, 0.08);
+  --vp-c-brand-softest: rgba(102, 187, 106, 0.04);
+}
+
+/* Custom hero section */
+.VPHero .title {
+  background: linear-gradient(120deg, var(--vp-c-brand-1) 30%, #42A5F5);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Feature cards styling */
+.VPFeature {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.3s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 8px 32px rgba(76, 175, 80, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Code blocks with better styling */
+div[class*='language-'] {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+div[class*='language-']:before {
+  border-radius: 0;
+}
+
+/* Custom badge styling */
+.custom-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 16px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  border: 1px solid var(--vp-c-brand-1);
+}
+
+.custom-badge.new {
+  background: linear-gradient(45deg, #FF6B35, #F7931E);
+  color: white;
+  border: none;
+}
+
+.custom-badge.beta {
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+}
+
+/* Terminal-like code blocks */
+.terminal {
+  background: #1a1a1a;
+  color: #00ff00;
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  overflow-x: auto;
+}
+
+.terminal:before {
+  content: '$ ';
+  color: #00ff00;
+  font-weight: bold;
+}
+
+/* Logo animation on hover */
+.VPNavBarTitle .logo {
+  transition: transform 0.3s ease;
+}
+
+.VPNavBarTitle:hover .logo {
+  transform: scale(1.1) rotate(5deg);
+}
+
+/* Custom container for callouts */
+.custom-block {
+  border-radius: 8px;
+  border-left: 4px solid var(--vp-c-brand-1);
+  background: var(--vp-c-brand-softest);
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.custom-block.tip {
+  border-left-color: var(--vp-c-brand-1);
+}
+
+.custom-block.warning {
+  border-left-color: #ff9800;
+  background: rgba(255, 152, 0, 0.04);
+}
+
+.custom-block.danger {
+  border-left-color: #f44336;
+  background: rgba(244, 67, 54, 0.04);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .VPFeature {
+    padding: 16px;
+  }
+}
+
+/* Loading animation for images */
+.VPImage {
+  transition: opacity 0.3s ease;
+}
+
+.VPImage:hover {
+  opacity: 0.9;
+}
