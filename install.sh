@@ -175,21 +175,37 @@ show_usage() {
     echo
     log_info "🚀 PipeGen is now installed!"
     echo
-    echo "To get started:"
+    echo "Quick Start Guide:"
     echo "  1. Create a new pipeline project:"
     echo "     $ pipegen init my-pipeline"
     echo
     echo "  2. Generate with AI (optional):"
-    echo "     $ pipegen init my-pipeline --ai --description 'e-commerce analytics'"
+    echo "     $ pipegen init my-ai-pipeline --ai --description 'real-time e-commerce analytics'"
     echo
-    echo "  3. Start the dashboard:"
-    echo "     $ cd my-pipeline && pipegen dashboard"
+    echo "  3. Navigate to your project:"
+    echo "     $ cd my-pipeline"
     echo
-    echo "  4. Run the pipeline:"
-    echo "     $ pipegen run --dashboard"
+    echo "  4. Validate your pipeline:"
+    echo "     $ pipegen validate"
     echo
-    echo "Documentation: https://github.com/$REPO/blob/main/README.md"
-    echo "Issues: https://github.com/$REPO/issues"
+    echo "  5. Start the dashboard:"
+    echo "     $ pipegen dashboard"
+    echo
+    echo "  6. Run the pipeline with monitoring:"
+    echo "     $ pipegen run --dashboard --duration 5m"
+    echo
+    echo "  7. Deploy with Docker:"
+    echo "     $ pipegen deploy"
+    echo
+    echo "📚 Documentation:"
+    echo "  • Full Documentation: https://mcolomerc.github.io/pipegen/"
+    echo "  • GitHub Repository: https://github.com/$REPO"
+    echo "  • Report Issues: https://github.com/$REPO/issues"
+    echo
+    echo "💡 Pro Tips:"
+    echo "  • Use 'pipegen --help' to see all available commands"
+    echo "  • Check out examples at https://mcolomerc.github.io/pipegen/examples.html"
+    echo "  • Configure AI providers: https://mcolomerc.github.io/pipegen/ai-generation.html"
     echo
 }
 
