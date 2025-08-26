@@ -1,30 +1,30 @@
 :root {
-  /* Updated brand colors - using a more professional blue-teal palette */
-  --vp-c-brand-1: #2196F3;
-  --vp-c-brand-2: #1976D2;
-  --vp-c-brand-3: #0D47A1;
-  --vp-c-brand-soft: rgba(33, 150, 243, 0.14);
-  --vp-c-brand-softer: rgba(33, 150, 243, 0.07);
-  --vp-c-brand-softest: rgba(33, 150, 243, 0.04);
+  /* Updated brand colors - using orange palette matching #b04b04 */
+  --vp-c-brand-1: #b04b04;
+  --vp-c-brand-2: #993e03;
+  --vp-c-brand-3: #7d3202;
+  --vp-c-brand-soft: rgba(176, 75, 4, 0.14);
+  --vp-c-brand-softer: rgba(176, 75, 4, 0.07);
+  --vp-c-brand-softest: rgba(176, 75, 4, 0.04);
   
   /* Accent colors */
-  --vp-c-accent-1: #00BCD4;
-  --vp-c-accent-2: #0097A7;
-  --vp-c-accent-3: #006064;
+  --vp-c-accent-1: #d4580a;
+  --vp-c-accent-2: #e67e22;
+  --vp-c-accent-3: #f39c12;
 }
 
 .dark {
-  --vp-c-brand-1: #42A5F5;
-  --vp-c-brand-2: #2196F3;
-  --vp-c-brand-3: #1976D2;
-  --vp-c-brand-soft: rgba(66, 165, 245, 0.16);
-  --vp-c-brand-softer: rgba(66, 165, 245, 0.08);
-  --vp-c-brand-softest: rgba(66, 165, 245, 0.04);
+  --vp-c-brand-1: #d4580a;
+  --vp-c-brand-2: #b04b04;
+  --vp-c-brand-3: #993e03;
+  --vp-c-brand-soft: rgba(212, 88, 10, 0.16);
+  --vp-c-brand-softer: rgba(212, 88, 10, 0.08);
+  --vp-c-brand-softest: rgba(212, 88, 10, 0.04);
   
   /* Accent colors for dark mode */
-  --vp-c-accent-1: #26C6DA;
-  --vp-c-accent-2: #00BCD4;
-  --vp-c-accent-3: #0097A7;
+  --vp-c-accent-1: #e67e22;
+  --vp-c-accent-2: #f39c12;
+  --vp-c-accent-3: #f1c40f;
 }
 
 /* Make logo larger in header */
@@ -297,37 +297,38 @@ div[class*='language-']:before {
   font-weight: 900;
   color: var(--vp-c-brand-1);
   margin-right: 8px;
+  font-size: 1.2em;
 }
 
 .VPFeatures .VPFeature:nth-child(1) .title::before {
-  content: "\f135"; /* fa-rocket */
+  content: "\f135"; /* fa-rocket - Quick Project Scaffolding */
 }
 
 .VPFeatures .VPFeature:nth-child(2) .title::before {
-  content: "\f544"; /* fa-robot */
+  content: "\f544"; /* fa-robot - AI-Powered Generation */
 }
 
 .VPFeatures .VPFeature:nth-child(3) .title::before {
-  content: "\f201"; /* fa-chart-line */
+  content: "\f201"; /* fa-chart-line - Dynamic Traffic Patterns */
 }
 
 .VPFeatures .VPFeature:nth-child(4) .title::before {
-  content: "\f395"; /* fa-docker */
+  content: "\f395"; /* fa-docker - Local Development Stack */
   font-family: "Font Awesome 6 Brands";
 }
 
 .VPFeatures .VPFeature:nth-child(5) .title::before {
-  content: "\f3fd"; /* fa-tachometer-alt */
+  content: "\f3fd"; /* fa-tachometer-alt - Real-time Monitoring */
 }
 
 .VPFeatures .VPFeature:nth-child(6) .title::before {
-  content: "\f02c"; /* fa-tags */
+  content: "\f02c"; /* fa-tags - Dynamic Resource Management */
 }
 
 .VPFeatures .VPFeature:nth-child(7) .title::before {
-  content: "\f058"; /* fa-check-circle */
+  content: "\f058"; /* fa-check-circle - Comprehensive Validation */
 }
 
 .VPFeatures .VPFeature:nth-child(8) .title::before {
-  content: "\f15c"; /* fa-file-alt */
+  content: "\f15c"; /* fa-file-alt - Execution Reports */
 }

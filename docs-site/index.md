@@ -17,53 +17,37 @@ hero:
       link: https://github.com/mcolomerc/pipegen
 
 features:
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Quick Project Scaffolding"
+  - title: "Quick Project Scaffolding"
     details: Generate complete pipeline projects with SQL statements, AVRO schemas, and Docker Compose setup in seconds.
+    link: /getting-started
     
-  - icon:
-      dark: /logo.png  
-      light: /logo.png
-    title: "AI-Powered Generation"
+  - title: "AI-Powered Generation"
     details: Describe your pipeline in natural language and let AI create optimized FlinkSQL statements and schemas.
+    link: /ai-generation
     
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Dynamic Traffic Patterns"
+  - title: "Dynamic Traffic Patterns"
     details: Simulate realistic traffic spikes and load patterns for comprehensive testing and capacity planning.
+    link: /traffic-patterns
     
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Local Development Stack"
+  - title: "Local Development Stack"
     details: Complete Docker-based development environment with Kafka, Flink, and Schema Registry.
+    link: /getting-started#local-setup
     
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Real-time Monitoring"
+  - title: "Real-time Monitoring"
     details: Live dashboard with WebSocket-based metrics, pipeline visualization, and performance analytics.
+    link: /dashboard
     
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Dynamic Resource Management"
+  - title: "Dynamic Resource Management"
     details: Automatic topic naming, schema registration, and cleanup to avoid conflicts in shared environments.
+    link: /configuration
     
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Comprehensive Validation"
+  - title: "Comprehensive Validation"
     details: Validate project structure, SQL syntax, AVRO schemas, and connectivity before deployment.
+    link: /commands/validate
     
-  - icon:
-      dark: /logo.png
-      light: /logo.png
-    title: "Execution Reports"
+  - title: "Execution Reports"
     details: Generate detailed HTML reports with charts, metrics, and pipeline diagrams for analysis.
+    link: /dashboard#reports
 ---
 
 <div class="custom-container">
