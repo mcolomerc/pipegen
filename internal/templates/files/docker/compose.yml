@@ -44,7 +44,7 @@ services:
       - "8081:8081"
     command: jobmanager
     depends_on:
-      broker:
+      pipegen-broker:
         condition: service_healthy
     environment:
       FLINK_PROPERTIES: "jobmanager.rpc.address: flink-jobmanager"
@@ -101,7 +101,7 @@ services:
     hostname: schema-registry
     container_name: pipegen-schema-registry
     depends_on:
-      broker:
+      pipegen-broker:
         condition: service_healthy
     ports:
       - "8082:8081"
