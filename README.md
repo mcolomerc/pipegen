@@ -1,7 +1,5 @@
 # PipeGen
 
-> 📖 **[Full Documentation & Interactive Site](https://mcolomerc.github.io/pipegen/)**
-
 <p align="center">
   <a href="https://github.com/sponsors/mcolomerc" target="_blank">
     <img src="https://img.shields.io/badge/Sponsor-GitHub-blueviolet?logo=github" alt="Sponsor on GitHub"/>
@@ -11,7 +9,7 @@
   </a>
 </p>
 
-PipeGen is a powerful CLI for creating and managing streaming data pipelines with Apache Kafka and FlinkSQL. It supports local development, AI-powered pipeline generation, and real-time monitoring.
+[PipeGen](https://mcolomerc.github.io/pipegen/) is a powerful CLI for creating and managing streaming data pipelines with Apache Kafka and FlinkSQL. It supports local development, AI-powered pipeline generation, and real-time monitoring. 
 
 ## Quick Start
 
