@@ -229,10 +229,16 @@ func (p *Producer) generateDynamicMessage(messageID int) (map[string]interface{}
 		case "timestamp", "timestamp_col":
 			message[fieldName] = now
 		case "properties", "metadata":
-			message[fieldName] = map[string]interface{}{
+			// For AVRO union types like ["null", {"type": "map", "values": "string"}]
+			// We need to specify the type explicitly
+			properties := map[string]string{
 				"source":  "pipegen",
 				"version": "1.0",
 				"session": fmt.Sprintf("session-%d", rand.Intn(100)),
+			}
+			// Wrap in union type format for AVRO encoding
+			message[fieldName] = map[string]interface{}{
+				"map": properties,
 			}
 		}
 	}
