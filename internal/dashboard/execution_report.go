@@ -91,44 +91,50 @@ type ChartDataPoint = TimeSeriesPoint
 
 // GenerateReport creates an HTML execution report
 func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (string, error) {
-	// Ensure output directory exists
+	fmt.Printf("[Report] Ensuring output directory exists: %s\n", g.outputDir)
 	if err := os.MkdirAll(g.outputDir, 0755); err != nil {
+		fmt.Printf("[Report] ERROR: failed to create output directory: %v\n", err)
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Load template
+	fmt.Printf("[Report] Loading template: %s\n", g.templatePath)
 	tmplContent, err := os.ReadFile(g.templatePath)
 	if err != nil {
+		fmt.Printf("[Report] ERROR: failed to read template file: %v\n", err)
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
 
-	// Parse template
+	fmt.Printf("[Report] Parsing template\n")
 	tmpl, err := template.New("report").Parse(string(tmplContent))
 	if err != nil {
+		fmt.Printf("[Report] ERROR: failed to parse template: %v\n", err)
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
-	// Add logo to data
 	data.LogoBase64 = g.logoBase64
 
-	// Generate timestamp for filename
 	timestamp := time.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("pipegen-execution-report-%s.html", timestamp)
 	filePath := filepath.Join(g.outputDir, filename)
 
-	// Create output file
+	fmt.Printf("[Report] Creating output file: %s\n", filePath)
 	file, err := os.Create(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create report file: %w", err)
+		fmt.Printf("[Report] ERROR: failed to create output file: %v\n", err)
+		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer func() {
-		_ = file.Close() // Ignore close error in defer
+		if err := file.Close(); err != nil {
+			fmt.Printf("failed to close file: %v\n", err)
+		}
 	}()
 
-	// Execute template
+	fmt.Printf("[Report] Executing template\n")
 	if err := tmpl.Execute(file, data); err != nil {
+		fmt.Printf("[Report] ERROR: failed to execute template: %v\n", err)
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
+	fmt.Printf("[Report] Report successfully generated: %s\n", filePath)
 	return filePath, nil
 }

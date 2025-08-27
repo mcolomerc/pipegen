@@ -2,7 +2,7 @@
 version: '3.8'
 
 services:
-  broker:
+  pipegen-broker:
     image: apache/kafka:latest
     hostname: broker
     container_name: broker
@@ -76,6 +76,24 @@ services:
     networks:
       - pipegen-network
 
+  # Flink SQL Gateway
+  sql-gateway:
+    image: flink:1.18.0-scala_2.12-java11
+    depends_on:
+      - flink-jobmanager
+    command: >
+      sh -c "
+        wget -q https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/1.18.0/flink-sql-connector-kafka-1.18.0.jar -P /opt/flink/lib &&
+        wget -q https://repo1.maven.org/maven2/org/apache/flink/flink-avro-confluent-registry/1.18.0/flink-avro-confluent-registry-1.18.0.jar -P /opt/flink/lib &&
+        bin/sql-gateway.sh start-foreground
+          -Dsql-gateway.endpoint.rest.address=0.0.0.0
+          -Dsql-gateway.endpoint.rest.port=8083
+          -Djobmanager.rpc.address=flink-jobmanager
+      "
+    ports:
+      - "8083:8083" # REST API del SQL Gateway
+    networks:
+      - pipegen-network
 
 {{if .WithSchemaRegistry}}
   schema-registry:

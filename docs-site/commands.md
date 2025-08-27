@@ -12,6 +12,7 @@ PipeGen provides a comprehensive set of commands for creating, managing, and mon
 | [`validate`](./commands/validate) | Validate project structure | Pre-deployment checks |
 | [`dashboard`](./commands/dashboard) | Start monitoring dashboard | Real-time monitoring |
 | [`check`](./commands/check) | Check AI provider setup | AI configuration validation |
+| [`clean`](./commands/clean) | Clean up Docker resources | Free up system resources |
 
 ## Quick Reference
 
@@ -64,6 +65,18 @@ pipegen validate --check-connectivity
 
 # Check AI setup
 pipegen check
+```
+
+### Cleaning Up
+```bash
+# Basic cleanup
+pipegen clean
+
+# Cleanup with volume removal
+pipegen clean --volumes
+
+# Force cleanup without prompt
+pipegen clean --force
 ```
 
 ## Global Flags

@@ -9,6 +9,8 @@ CREATE TABLE output_results (
   'connector' = 'kafka',
   'topic' = 'output-results',
   'properties.bootstrap.servers' = 'localhost:9092',
-  'format' = 'avro-confluent',
-  'avro-confluent.url' = 'http://localhost:8082'
+  'format' = 'avro',
+  'avro-confluent.schema-registry.url' = 'http://localhost:8082',
+  'scan.startup.mode' = 'earliest-offset',
+  'value.format' = 'avro'
 );

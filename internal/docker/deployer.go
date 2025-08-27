@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -352,5 +353,78 @@ func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *types.SQLSta
 	fmt.Printf("  📄 SQL statement saved to: %s\n", sqlFile)
 	fmt.Printf("  💡 Manual execution: Use Flink SQL CLI or Web UI to execute this statement\n")
 
+	return nil
+}
+
+// Deployer handles Docker Compose operations for cleanup
+type Deployer struct {
+	projectDir  string
+	projectName string
+}
+
+// NewDeployer creates a new deployer for Docker operations
+func NewDeployer(projectDir, projectName string) *Deployer {
+	return &Deployer{
+		projectDir:  projectDir,
+		projectName: projectName,
+	}
+}
+
+// CheckDockerAvailability checks if Docker is available and running
+func (d *Deployer) CheckDockerAvailability() error {
+	cmd := exec.Command("docker", "version")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker is not available or not running: %w", err)
+	}
+	return nil
+}
+
+// StopStack stops the Docker Compose stack
+func (d *Deployer) StopStack() error {
+	fmt.Println("🛑 Stopping Docker containers...")
+
+	cmd := exec.Command("docker", "compose", "down")
+	cmd.Dir = d.projectDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to stop containers: %w", err)
+	}
+
+	fmt.Println("✅ Containers stopped")
+	return nil
+}
+
+// RemoveVolumes removes Docker volumes
+func (d *Deployer) RemoveVolumes() error {
+	cmd := exec.Command("docker", "compose", "down", "-v")
+	cmd.Dir = d.projectDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to remove volumes: %w", err)
+	}
+
+	fmt.Println("✅ Volumes removed")
+	return nil
+}
+
+// RemoveImages removes Docker images used by the stack
+func (d *Deployer) RemoveImages() error {
+	cmd := exec.Command("docker", "compose", "down", "--rmi", "all")
+	cmd.Dir = d.projectDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to remove images: %w", err)
+	}
+
+	fmt.Println("✅ Images removed")
+	return nil
+}
+
+// CleanupOrphans removes orphaned containers
+func (d *Deployer) CleanupOrphans() error {
+	cmd := exec.Command("docker", "compose", "down", "--remove-orphans")
+	cmd.Dir = d.projectDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to cleanup orphans: %w", err)
+	}
+
+	fmt.Println("✅ Orphaned containers cleaned up")
 	return nil
 }

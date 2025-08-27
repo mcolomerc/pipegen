@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,22 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		TrafficPatterns:   trafficPatterns,
 	}
 
+	// --- NEW LOGIC: Check if stack is running, deploy if needed ---
+	if !isDockerStackRunning(projectDir) {
+		fmt.Println("🧹 Docker stack not running. Deploying stack...")
+		deployCmd, _, _ := cmd.Root().Find([]string{"deploy"})
+		if deployCmd == nil {
+			return fmt.Errorf("deploy command not found")
+		}
+		deployArgs := []string{"--project-dir", projectDir}
+		if err := deployCmd.RunE(deployCmd, deployArgs); err != nil {
+			return fmt.Errorf("failed to deploy stack: %w", err)
+		}
+	} else {
+		fmt.Println("✅ Docker stack is already running. Skipping deploy.")
+	}
+	// --- END NEW LOGIC ---
+
 	if dryRun {
 		fmt.Println("🔍 Dry run mode - showing execution plan:")
 		return showExecutionPlan(config)
@@ -118,7 +135,16 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 
 	// Set up report generation if enabled
 	if config.GenerateReport {
-		reportGenerator, err := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		reportsPath := getReportsDir(config)
+		fmt.Printf("[Runner] Report generation enabled. Reports dir: %s\n", reportsPath)
+		// Create reports directory if it does not exist
+		if _, err := os.Stat(reportsPath); os.IsNotExist(err) {
+			if err := os.MkdirAll(reportsPath, 0755); err != nil {
+				return fmt.Errorf("failed to create reports directory: %w", err)
+			}
+			fmt.Printf("[Runner] Created reports directory: %s\n", reportsPath)
+		}
+		reportGenerator, err := dashboard.NewExecutionReportGenerator(reportsPath)
 		if err != nil {
 			return fmt.Errorf("failed to create report generator: %w", err)
 		}
@@ -342,4 +368,16 @@ func validateTrafficPatternDuration(patterns *pipeline.TrafficPatterns, duration
 	}
 
 	return nil
+}
+
+// isDockerStackRunning checks if the main containers are up
+func isDockerStackRunning(projectDir string) bool {
+	// This checks for running containers with docker compose ps
+	cmd := exec.Command("docker", "compose", "ps", "--format", "json")
+	cmd.Dir = projectDir
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(output), "running")
 }

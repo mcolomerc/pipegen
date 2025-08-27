@@ -20,7 +20,7 @@
       "doc": "Type of event (click, view, purchase, etc.)"
     },
     {
-      "name": "timestamp",
+      "name": "ts",
       "type": "long",
       "doc": "Event timestamp in milliseconds since epoch"
     },
