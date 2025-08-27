@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/segmentio/kafka-go"
 	"pipegen/internal/pipeline"
 	"pipegen/internal/types"
+
+	"github.com/segmentio/kafka-go"
 )
 
 // StackDeployer handles deployment operations for the local stack
@@ -135,45 +136,68 @@ func (d *StackDeployer) extractTopicNames(statements []*types.SQLStatement) []st
 func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) error {
 	fmt.Printf("🔌 Connecting to Kafka at %s...\n", d.kafkaAddr)
 
-	// Retry connection with exponential backoff
-	var conn *kafka.Conn
-	var err error
+	// Create a Kafka client with proper configuration
+	transport := &kafka.Transport{
+		DialTimeout: 10 * time.Second,
+		IdleTimeout: 30 * time.Second,
+	}
+
+	client := &kafka.Client{
+		Addr:      kafka.TCP(d.kafkaAddr),
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}
+
+	// Retry topic creation with exponential backoff
 	for attempt := 1; attempt <= 5; attempt++ {
-		conn, err = kafka.Dial("tcp", d.kafkaAddr)
+		fmt.Printf("📝 Attempt %d: Creating Kafka topics...\n", attempt)
+
+		// Prepare topic configurations
+		topicConfigs := make([]kafka.TopicConfig, 0, len(topics))
+		for _, topic := range topics {
+			topicConfigs = append(topicConfigs, kafka.TopicConfig{
+				Topic:             topic,
+				NumPartitions:     3,
+				ReplicationFactor: 1,
+			})
+		}
+
+		// Create topics using the client
+		response, err := client.CreateTopics(ctx, &kafka.CreateTopicsRequest{
+			Topics: topicConfigs,
+		})
+
 		if err == nil {
-			break
+			// Check if any topics failed to create
+			allSuccess := true
+			for _, topic := range topics {
+				if topicError, exists := response.Errors[topic]; exists && topicError != nil {
+					// Ignore "topic already exists" errors
+					if !strings.Contains(topicError.Error(), "already exists") &&
+						!strings.Contains(topicError.Error(), "TOPIC_ALREADY_EXISTS") {
+						fmt.Printf("⚠️  Failed to create topic %s: %v\n", topic, topicError)
+						allSuccess = false
+					} else {
+						fmt.Printf("  ✅ Topic %s already exists\n", topic)
+					}
+				} else {
+					fmt.Printf("  ✅ Topic created: %s\n", topic)
+				}
+			}
+
+			if allSuccess {
+				fmt.Printf("✅ All topics created successfully\n")
+				return nil
+			}
 		}
 
 		if attempt < 5 {
-			fmt.Printf("⚠️  Connection attempt %d failed, retrying in %d seconds...\n", attempt, attempt*2)
+			fmt.Printf("⚠️  Topic creation attempt %d failed, retrying in %d seconds...\n", attempt, attempt*2)
 			time.Sleep(time.Duration(attempt*2) * time.Second)
 		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("failed to connect to Kafka after 5 attempts: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	fmt.Printf("✅ Connected to Kafka successfully\n")
-
-	for _, topic := range topics {
-		fmt.Printf("📝 Creating Kafka topic: %s\n", topic)
-
-		err := conn.CreateTopics(kafka.TopicConfig{
-			Topic:             topic,
-			NumPartitions:     3,
-			ReplicationFactor: 1,
-		})
-
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("failed to create topic %s: %w", topic, err)
-		}
-
-		fmt.Printf("  ✅ Topic created: %s\n", topic)
-	}
-
-	return nil
+	return fmt.Errorf("failed to create topics after 5 attempts")
 }
 
 // registerSchemas registers AVRO schemas in Schema Registry
