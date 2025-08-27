@@ -39,10 +39,8 @@ func NewConsumer(config *Config) (*Consumer, error) {
 func (c *Consumer) Start(ctx context.Context, topic string) error {
 	fmt.Printf("👂 Starting consumer for topic: %s\n", topic)
 
-	// Configure reader for the specific topic
-	if err := c.reader.SetOffset(kafka.FirstOffset); err != nil {
-		return fmt.Errorf("failed to set offset: %w", err)
-	}
+	// Note: When using GroupID, Kafka manages offsets automatically
+	// Manual offset setting is not supported with consumer groups
 
 	messageCount := 0
 	errorCount := 0
