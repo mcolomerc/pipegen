@@ -4,13 +4,13 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -44,21 +44,20 @@ func getLatestVersion() (string, error) {
 			fmt.Fprintf(os.Stderr, "Warning: failed to close response body: %v\n", closeErr)
 		}
 	}()
-	buf := new(strings.Builder)
-	_, err = io.Copy(buf, resp.Body)
-	if err != nil {
-		return "", err
+
+	var release struct {
+		TagName string `json:"tag_name"`
 	}
-	for _, line := range strings.Split(buf.String(), "\n") {
-		if strings.Contains(line, "tag_name") {
-			parts := strings.Split(line, ":")
-			if len(parts) > 1 {
-				tag := strings.Trim(parts[1], " \",")
-				return tag, nil
-			}
-		}
+
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", fmt.Errorf("failed to parse release data: %v", err)
 	}
-	return "", fmt.Errorf("tag_name not found in response")
+
+	if release.TagName == "" {
+		return "", fmt.Errorf("no tag_name found in response")
+	}
+
+	return release.TagName, nil
 }
 
 func selfUpdate(version string) error {
