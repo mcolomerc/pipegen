@@ -272,7 +272,7 @@ jobs:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
     needs: [create-release]
-    if: "!contains(github.ref, '-')" # Only for stable releases
+    if: false # Disabled - homebrew-tap repository doesn't exist yet
     
     steps:
     - name: Update Homebrew formula
