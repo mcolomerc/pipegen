@@ -1,47 +1,29 @@
+
 version: '3.8'
 
 services:
-  # Zookeeper
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    hostname: zookeeper
-    container_name: pipegen-zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-    networks:
-      - pipegen-network
-    healthcheck:
-      test: ["CMD", "zkServer.sh", "status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Kafka
   kafka:
-    image: confluentinc/cp-kafka:7.4.0
+    image: confluentinc/cp-server:8.0.0
     hostname: kafka
     container_name: pipegen-kafka
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     ports:
       - "9092:9092"
       - "29092:29092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092,CONTROLLER://kafka:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_JMX_PORT: 9101
       KAFKA_JMX_HOSTNAME: localhost
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
     volumes:
       - kafka-data:/var/lib/kafka/data
     networks:
@@ -52,7 +34,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # Flink JobManager
+
   flink-jobmanager:
     image: flink:1.18.0-scala_2.12-java11
     hostname: flink-jobmanager
@@ -76,7 +58,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Flink TaskManager
   flink-taskmanager:
     image: flink:1.18.0-scala_2.12-java11
     hostname: flink-taskmanager
@@ -94,9 +75,10 @@ services:
     networks:
       - pipegen-network
 
-{{if .WithSchemaRegistry}}  # Schema Registry
+
+{{if .WithSchemaRegistry}}
   schema-registry:
-    image: confluentinc/cp-schema-registry:7.4.0
+    image: confluentinc/cp-schema-registry:8.0.0
     hostname: schema-registry
     container_name: pipegen-schema-registry
     depends_on:
@@ -115,8 +97,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
 {{end}}
+
 
 volumes:
   kafka-data:
