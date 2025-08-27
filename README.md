@@ -17,15 +17,14 @@
 # Install PipeGen
 curl -sSL https://raw.githubusercontent.com/mcolomerc/pipegen/main/install.sh | bash
 
-# Initialize a new pipeline project
-pipegen init my-pipeline
-cd my-pipeline
+# Create an AI-generated fraud detection pipeline
+pipegen init fraud-detection --describe "Monitor payment transactions, detect suspicious patterns using machine learning, and alert on potential fraud within 30 seconds"
 
-# Deploy local stack (Kafka + Flink + Schema Registry)
+# Deploy local development stack
 pipegen deploy
 
-# Run the pipeline
-pipegen run --dashboard --duration 2m
+# Run with traffic spikes simulation
+pipegen run --message-rate 100 --duration 10m --traffic-pattern "2m-4m:400%,6m-8m:300%" --dashboard
 ```
 
 ## Features ([see docs](https://mcolomerc.github.io/pipegen/features.html))
