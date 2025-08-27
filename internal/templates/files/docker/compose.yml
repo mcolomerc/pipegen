@@ -29,10 +29,11 @@ services:
     networks:
       - pipegen-network
     healthcheck:
-      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
-      interval: 30s
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 30s
 
 
   flink-jobmanager:

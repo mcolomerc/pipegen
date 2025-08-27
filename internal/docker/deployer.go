@@ -131,13 +131,31 @@ func (d *StackDeployer) extractTopicNames(statements []*types.SQLStatement) []st
 	return result
 }
 
-// createKafkaTopics creates Kafka topics
+// createKafkaTopics creates Kafka topics with retry logic
 func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) error {
-	conn, err := kafka.Dial("tcp", d.kafkaAddr)
+	fmt.Printf("🔌 Connecting to Kafka at %s...\n", d.kafkaAddr)
+
+	// Retry connection with exponential backoff
+	var conn *kafka.Conn
+	var err error
+	for attempt := 1; attempt <= 5; attempt++ {
+		conn, err = kafka.Dial("tcp", d.kafkaAddr)
+		if err == nil {
+			break
+		}
+
+		if attempt < 5 {
+			fmt.Printf("⚠️  Connection attempt %d failed, retrying in %d seconds...\n", attempt, attempt*2)
+			time.Sleep(time.Duration(attempt*2) * time.Second)
+		}
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to connect to Kafka: %w", err)
+		return fmt.Errorf("failed to connect to Kafka after 5 attempts: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
+
+	fmt.Printf("✅ Connected to Kafka successfully\n")
 
 	for _, topic := range topics {
 		fmt.Printf("📝 Creating Kafka topic: %s\n", topic)
