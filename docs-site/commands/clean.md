@@ -1,4 +1,3 @@
-
 # `clean`
 
 Clean up Docker resources and free up system resources used by PipeGen.

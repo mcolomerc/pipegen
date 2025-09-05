@@ -63,8 +63,8 @@ func runValidate(cmd *cobra.Command, args []string) error {
 }
 
 func validateProjectStructure(projectDir string) error {
-	requiredDirs := []string{"sql", "schemas", "config"}
-	requiredFiles := []string{".pipegen.yaml"}
+	requiredDirs := []string{"sql", "schemas", "connectors"}
+	requiredFiles := []string{".pipegen.yaml", "flink-entrypoint.sh"}
 
 	for _, dir := range requiredDirs {
 		dirPath := filepath.Join(projectDir, dir)

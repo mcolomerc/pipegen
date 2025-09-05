@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"pipegen/internal/types"
 
 	"github.com/segmentio/kafka-go"
+	"github.com/spf13/viper"
 )
 
 // StackDeployer handles deployment operations for the local stack
@@ -23,15 +25,47 @@ type StackDeployer struct {
 	kafkaAddr          string
 	flinkAddr          string
 	schemaRegistryAddr string
+	sqlGatewayAddr     string
 }
 
 // NewStackDeployer creates a new stack deployer
 func NewStackDeployer(projectDir string) *StackDeployer {
+	// Read configuration from viper
+	kafkaAddr := viper.GetString("bootstrap_servers")
+	if kafkaAddr == "" {
+		kafkaAddr = "localhost:9092" // fallback to default
+	}
+
+	// Extract host and port from bootstrap servers
+	if strings.Contains(kafkaAddr, "://") {
+		// Handle URLs like "kafka://localhost:9092"
+		parts := strings.Split(kafkaAddr, "://")
+		if len(parts) == 2 {
+			kafkaAddr = parts[1]
+		}
+	}
+
+	flinkAddr := viper.GetString("flink_url")
+	if flinkAddr == "" {
+		flinkAddr = "http://localhost:8081" // fallback to default
+	}
+
+	schemaRegistryAddr := viper.GetString("schema_registry_url")
+	if schemaRegistryAddr == "" {
+		schemaRegistryAddr = "http://localhost:8082" // fallback to default
+	}
+
+	sqlGatewayAddr := viper.GetString("flink_sql_gateway_url")
+	if sqlGatewayAddr == "" {
+		sqlGatewayAddr = "http://localhost:8083" // fallback to default
+	}
+
 	return &StackDeployer{
 		projectDir:         projectDir,
-		kafkaAddr:          "localhost:9092",
-		flinkAddr:          "http://localhost:8081",
-		schemaRegistryAddr: "http://localhost:8082",
+		kafkaAddr:          kafkaAddr,
+		flinkAddr:          flinkAddr,
+		schemaRegistryAddr: schemaRegistryAddr,
+		sqlGatewayAddr:     sqlGatewayAddr,
 	}
 }
 
@@ -206,14 +240,28 @@ func (d *StackDeployer) registerSchemas(ctx context.Context, schemas map[string]
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	for name, schema := range schemas {
-		subject := d.getSchemaSubject(name, topics)
-		fmt.Printf("📋 Registering schema: %s -> %s\n", name, subject)
+		// Register value schema
+		valueSubject := d.getSchemaSubject(name, topics)
+		fmt.Printf("📋 Registering value schema: %s -> %s\n", name, valueSubject)
 
-		if err := d.registerSchema(client, subject, schema); err != nil {
-			return fmt.Errorf("failed to register schema %s: %w", name, err)
+		if err := d.registerSchema(client, valueSubject, schema); err != nil {
+			return fmt.Errorf("failed to register value schema %s: %w", name, err)
 		}
 
-		fmt.Printf("  ✅ Schema registered: %s\n", subject)
+		fmt.Printf("  ✅ Value schema registered: %s\n", valueSubject)
+
+		// For output schema, also register key schema for upsert operations
+		if name == "output" {
+			keySubject := d.getKeySchemaSubject(name, topics)
+			keySchema := d.createKeySchema(schema)
+			fmt.Printf("📋 Registering key schema: %s -> %s\n", name, keySubject)
+
+			if err := d.registerSchema(client, keySubject, keySchema); err != nil {
+				return fmt.Errorf("failed to register key schema %s: %w", name, err)
+			}
+
+			fmt.Printf("  ✅ Key schema registered: %s\n", keySubject)
+		}
 	}
 
 	return nil
@@ -224,11 +272,45 @@ func (d *StackDeployer) getSchemaSubject(schemaName string, topics []string) str
 	// Map schema names to topics
 	switch schemaName {
 	case "input":
-		return "input-events-value"
+		return "transactions-value"
 	case "output":
 		return "output-results-value"
 	default:
 		return fmt.Sprintf("%s-value", schemaName)
+	}
+}
+
+// getKeySchemaSubject generates Schema Registry subject name for key schemas
+func (d *StackDeployer) getKeySchemaSubject(schemaName string, topics []string) string {
+	// Map schema names to key topics
+	switch schemaName {
+	case "output":
+		return "output-results-key"
+	default:
+		return fmt.Sprintf("%s-key", schemaName)
+	}
+}
+
+// createKeySchema creates a key schema from a value schema
+func (d *StackDeployer) createKeySchema(valueSchema *pipeline.Schema) *pipeline.Schema {
+	// For simplicity, create a basic key schema with just the name field
+	// In a production environment, you'd want to parse the original schema
+	// and extract only the key fields
+	keySchemaContent := `{
+  "type": "record",
+  "name": "OutputResultKey",
+  "namespace": "test_pipeline.results",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string"
+    }
+  ]
+}`
+
+	return &pipeline.Schema{
+		Name:    "output-key",
+		Content: keySchemaContent,
 	}
 }
 
@@ -306,6 +388,13 @@ func (d *StackDeployer) processStatementsForLocal(statements []*types.SQLStateme
 func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQLStatement) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 
+	// Create a session first
+	sessionID, err := d.createFlinkSession(ctx, client)
+	if err != nil {
+		fmt.Printf("  ⚠️  Failed to create Flink session, trying fallback method: %v\n", err)
+		return d.deployViaRESTAPI(client, stmt)
+	}
+
 	// Create SQL job submission payload
 	payload := map[string]interface{}{
 		"statement": stmt.Content,
@@ -316,8 +405,8 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQ
 		return fmt.Errorf("failed to marshal SQL statement: %w", err)
 	}
 
-	// Submit job via Flink SQL Gateway (port 8083)
-	url := "http://localhost:8083/v1/sessions/default/statements"
+	// Submit job via Flink SQL Gateway using the created session
+	url := fmt.Sprintf("%s/v1/sessions/%s/statements", d.sqlGatewayAddr, sessionID)
 	resp, err := client.Post(url, "application/json", strings.NewReader(string(payloadBytes)))
 	if err != nil {
 		// Fallback: try REST API if SQL Gateway is not available
@@ -330,6 +419,56 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQ
 	}
 
 	return nil
+}
+
+// createFlinkSession creates a new Flink SQL Gateway session
+func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Client) (string, error) {
+	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", d.sqlGatewayAddr)
+	sessionReqBody := `{"sessionName": "pipegen-deploy-session", "properties": {}}`
+
+	sessionReq, err := http.NewRequestWithContext(ctx, "POST", sessionEndpoint, strings.NewReader(sessionReqBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create session request: %w", err)
+	}
+	sessionReq.Header.Set("Content-Type", "application/json")
+
+	sessionResp, err := client.Do(sessionReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to create session: %w", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+
+	sessionBody, err := io.ReadAll(sessionResp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read session response: %w", err)
+	}
+
+	if sessionResp.StatusCode != 200 {
+		return "", fmt.Errorf("session creation failed with status %d: %s", sessionResp.StatusCode, string(sessionBody))
+	}
+
+	sessionID := d.extractSessionID(string(sessionBody))
+	if sessionID == "" {
+		return "", fmt.Errorf("could not extract session ID from response: %s", string(sessionBody))
+	}
+
+	fmt.Printf("[Flink SQL Gateway] Session creation response: %s\n", string(sessionBody))
+	return sessionID, nil
+}
+
+// extractSessionID extracts session ID from Flink SQL Gateway response
+func (d *StackDeployer) extractSessionID(resp string) string {
+	// Look for "sessionHandle":"..."
+	idx := strings.Index(resp, "\"sessionHandle\":\"")
+	if idx == -1 {
+		return ""
+	}
+	start := idx + len("\"sessionHandle\":\"")
+	end := strings.Index(resp[start:], "\"")
+	if end == -1 {
+		return ""
+	}
+	return resp[start : start+end]
 }
 
 // deployViaRESTAPI deploys via Flink's REST API (fallback method)

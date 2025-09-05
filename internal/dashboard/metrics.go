@@ -96,7 +96,7 @@ func (mc *MetricsCollector) collectFlinkMetrics(ctx context.Context) {
 // updateKafkaMetrics queries Kafka for current metrics
 func (mc *MetricsCollector) updateKafkaMetrics() error {
 	if len(mc.kafkaAddrs) == 0 {
-		mc.kafkaAddrs = []string{"localhost:9092"}
+		return fmt.Errorf("no Kafka addresses configured")
 	}
 
 	// Create Kafka client

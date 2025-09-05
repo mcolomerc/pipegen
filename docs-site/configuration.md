@@ -13,7 +13,7 @@ pipeline:
 
 kafka:
   brokers:
-    - "localhost:9092"
+    - "localhost:9093"
     - "kafka-2:9092"
   topics:
     input: "user-events"
@@ -42,9 +42,14 @@ processing:
     - "sql/03_create_output_table.sql"
     - "sql/04_insert_results.sql"
 
+# Connector Management
+connectors:
+  directory: "connectors/"
+  auto_populate: true
+  restart_required: true  # Restart containers after adding custom JARs
+
 monitoring:
   metrics_enabled: true
-  dashboard_port: 8080
   log_level: "info"
 ```
 
@@ -159,6 +164,51 @@ processing:
       jar: "libs/custom-functions.jar"
 ```
 
+### Runtime Configuration
+
+Control pipeline execution behavior and timing:
+
+```yaml
+runtime:
+  # Producer settings
+  message_rate: 100                     # Messages per second
+  duration: "30s"                       # Producer execution duration
+
+  # Pipeline timing
+  pipeline_timeout: "5m"                # Overall pipeline timeout
+  expected_messages: 0                  # Expected consumer messages (0 = auto-calculate)
+
+  # Execution control
+  cleanup: true                         # Clean up resources after execution
+  generate_report: true                 # Generate HTML execution reports
+  reports_dir: "./reports"              # Reports output directory
+
+  # Traffic patterns (for load testing)
+  traffic_patterns:
+    - time_range: "30s-60s"
+      rate_multiplier: 3.0              # 300% of baseline rate
+    - time_range: "90s-120s"
+      rate_multiplier: 2.0              # 200% of baseline rate
+```
+
+#### Smart Consumer Stopping
+
+PipeGen automatically calculates expected message count and stops the consumer when complete:
+
+- **Auto-calculation**: Uses producer statistics to determine expected messages
+- **Manual override**: Set `expected_messages` for precise control
+- **Progress tracking**: Real-time updates show completion percentage
+- **Smart timeout**: Stops after 30s if no messages received
+
+#### Pipeline Timing
+
+Two separate timeout controls provide flexibility:
+
+- **Producer Duration** (`duration`): How long the producer runs
+- **Pipeline Timeout** (`pipeline_timeout`): Total time allowed for complete pipeline execution
+
+This separation allows quick producer cycles while giving Flink adequate processing time.
+
 ### Monitoring Configuration
 
 ```yaml
@@ -189,8 +239,8 @@ monitoring:
 # config-local.yaml
 kafka:
   brokers:
-    - "localhost:9092"
-    
+    - "localhost:9093"
+
 flink:
   jobmanager_url: "http://localhost:8081"
   parallelism: 1
@@ -368,6 +418,39 @@ kafka:
 - Keep sensitive data in environment variables
 - Validate configurations in CI/CD
 - Version control configuration files
+
+### Connector Management
+PipeGen automatically manages Flink connector JARs in the `connectors/` directory:
+
+**Automatic Population:**
+- Downloads required connectors during project initialization
+- Includes Kafka, AVRO, Schema Registry connectors
+- Version-aligned with Flink 1.18.x
+
+**Adding Custom Connectors:**
+```bash
+# Copy custom connector JARs to connectors directory
+cp my-database-connector.jar ./connectors/
+cp custom-format-connector.jar ./connectors/
+
+# Restart containers to load new connectors
+docker-compose restart flink-jobmanager flink-taskmanager sql-gateway
+
+# Verify connectors are loaded
+docker exec flink-jobmanager ls -la /opt/flink/lib/
+```
+
+**Default Connectors Included:**
+- **Kafka Connector** (`flink-sql-connector-kafka-3.1.0-1.18.jar`)
+- **AVRO Schema Registry** (`flink-sql-avro-confluent-registry-1.18.1.jar`)
+- **Kafka Clients** (`kafka-clients-3.4.0.jar`)
+- **Jackson JSON Libraries** (jackson-core, jackson-databind, jackson-annotations)
+- **Supporting Libraries** (Guava, CSV/JSON formatters)
+
+**Important Notes:**
+- Container restart is required after adding custom JARs
+- Ensure connector versions are compatible with Flink 1.18.x
+- JARs are copied from `./connectors/` to `/opt/flink/lib/` during container startup
 
 ### Performance Tuning
 - Set appropriate parallelism for your workload

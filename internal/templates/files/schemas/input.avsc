@@ -1,0 +1,20 @@
+{
+  "type": "record",
+  "name": "InputEvent",
+  "namespace": "{{.SanitizedName}}.events",
+  "doc": "Schema for input events",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string",
+      "default": "",
+      "doc": "Name field for transactions"
+    },
+    {
+      "name": "amount",
+      "type": "int",
+      "default": 0,
+      "doc": "Amount field for transactions"
+    }
+  ]
+}

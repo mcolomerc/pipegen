@@ -5,6 +5,68 @@ All notable changes to PipeGen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+# Changelog
+
+All notable changes to PipeGen will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.2.0] - 2025-09-04
+
+### Added
+- **Smart Consumer Stopping**: 🎯
+  - Automatic consumer termination when expected message count is reached
+  - Auto-calculation of expected messages based on producer output
+  - Manual override with `--expected-messages` flag for precise control
+  - Real-time progress tracking with completion percentage
+  - 30-second smart timeout to prevent hanging when no messages available
+  - Separate `--pipeline-timeout` independent of producer `--duration`
+
+- **Enhanced Pipeline Timing**:
+  - Producer duration (`--duration`) now separate from overall pipeline timeout (`--pipeline-timeout`)
+  - Default producer duration reduced to 30s for faster development cycles
+  - Pipeline timeout remains 5 minutes to allow Flink processing time
+  - Intelligent flow control ensures consumer and Flink have time to process
+
+- **Improved User Experience**:
+  - Much faster pipeline completion (30-45 seconds vs 5+ minutes)
+  - Clear progress indicators: "908/908 messages (100% complete)"
+  - Better error handling and graceful stopping
+  - Professional status messages and consolidated logging
+
+### Fixed
+- **Output Schema Registration**: Fixed Flink not producing output messages by ensuring both input and output AVRO schemas are registered
+- **Enhanced Flink Monitoring**: Added checks for both read AND write records to verify Flink is actually producing output
+- **Consumer Hanging**: Eliminated long waits for pipeline timeout when no messages are available
+
+## [1.1.0] - 2025-09-XX
+
+### Added
+- **Enhanced AVRO Schema Registry Integration**:
+  - Smart producer with automatic format detection (AVRO when schema registry available, JSON fallback)
+  - Proper Confluent wire format with magic bytes and schema IDs
+  - Enhanced consumer group lag monitoring for better processing detection
+  - Improved connector compatibility (resolved version conflicts)
+
+- **Improved CLI Experience**:
+  - Updated flag structure (`--message-rate`, `--duration` instead of `--rate`, `--messages`)
+  - Enhanced cleanup control with `--cleanup=true/false`
+  - HTML report generation enabled by default (`--generate-report`)
+  - Global table creation mode (`--global-tables`)
+  - Configurable dashboard port (`--dashboard-port`)
+
+- **Better Monitoring & Reports**:
+  - Enhanced monitoring with consumer group lag analysis
+  - More reliable processing detection
+  - Improved HTML execution reports with professional theme
+  - Real-time dashboard improvements
+
+### Fixed
+- **AVRO Producer**: Fixed hardcoded JSON encoding - now properly uses AVRO format
+- **Connector Issues**: Resolved Flink AVRO connector version conflicts
+- **Schema Registry**: Improved schema registration and retrieval reliability
+
 ## [1.0.0] - 2024-12-XX
 
 ### Added

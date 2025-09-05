@@ -42,15 +42,26 @@ Complete Docker-based development environment:
 
 [Set up local environment →](/getting-started#local-setup)
 
+## <i class="fas fa-code"></i> AVRO Schema Registry Integration
+
+Full-featured schema management with automatic format detection:
+- **Smart Producer**: Automatically uses AVRO format when Schema Registry is available
+- **Confluent Wire Format**: Proper magic bytes and schema ID encoding
+- **JSON Fallback**: Seamless fallback to JSON when no schema registry
+- **Schema Evolution**: Version management and compatibility checking
+- **Enhanced Monitoring**: Consumer group lag analysis for processing detection
+
+[Learn about schema management →](/configuration#schema-configuration)
+
 ## <i class="fas fa-chart-bar"></i> Real-time Monitoring
 
-Live dashboard with comprehensive metrics:
-- WebSocket-based real-time updates
-- Pipeline execution visualization
-- Performance analytics and insights
-- Interactive charts and graphs
+Comprehensive execution tracking with detailed reporting:
+- Automatic HTML report generation for every run
+- Performance analytics and interactive charts
+- Pipeline execution metrics and analysis
+- Professional reports ready for sharing
 
-[Access the dashboard →](/dashboard)
+[View report examples →](/features/reports)
 
 ## <i class="fas fa-cogs"></i> Dynamic Resource Management
 
@@ -62,7 +73,23 @@ Intelligent resource handling to avoid conflicts:
 
 [Configure resources →](/configuration)
 
-## <i class="fas fa-check-circle"></i> Comprehensive Validation
+## <i class="fas fa-check-circle"></i> Smart Consumer Stopping
+
+Intelligent pipeline completion with automatic consumer termination:
+- **Auto-calculation**: Automatically determines expected message count from producer output
+- **Manual Control**: Override with `--expected-messages` for precise control
+- **Progress Tracking**: Real-time progress updates with completion percentage
+- **Smart Timeout**: 30-second timeout prevents hanging when no messages available
+- **Separate Timeouts**: Producer duration independent of overall pipeline timeout
+
+Benefits:
+- **Faster Execution**: No waiting for arbitrary 5-minute timeouts
+- **Precise Control**: Stop exactly when work is complete
+- **Better UX**: Clear progress indication and immediate completion
+
+[Learn about pipeline timing →](/commands/run#smart-consumer-stopping)
+
+## <i class="fas fa-cogs"></i> Comprehensive Validation
 
 Validate your pipeline before deployment:
 - Project structure verification
@@ -75,14 +102,14 @@ Validate your pipeline before deployment:
 
 ## <i class="fas fa-file-alt"></i> Execution Reports
 
-Generate detailed reports for analysis:
-- HTML reports with interactive charts
-- Pipeline execution metrics
-- Performance analysis
-- Resource utilization graphs
-- Export capabilities for sharing
+Generate comprehensive reports for analysis and sharing:
+- Professional HTML reports with interactive charts
+- Complete pipeline execution metrics and performance data
+- Automatic generation with timestamped filenames saved to `reports/` folder
+- Configuration snapshots and resource utilization tracking
+- Easy sharing capabilities for stakeholders and team collaboration
 
-[Generate reports →](/dashboard#reports)
+[Learn about reports →](/features/reports)
 
 ---
 

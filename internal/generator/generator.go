@@ -1,8 +1,11 @@
 package generator
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -133,10 +136,8 @@ func (g *ProjectGenerator) generateAVROSchemas() error {
 		}
 	}
 
-	// Always generate output schema
-	if err := g.generateOutputSchema(schemasDir); err != nil {
-		return err
-	}
+	// Note: Output schema is not generated as it will be registered automatically by Flink CREATE TABLE
+	// This avoids double schema registration conflicts
 
 	return nil
 }
@@ -180,26 +181,8 @@ func (g *ProjectGenerator) generateDefaultInputSchema(schemasDir string) error {
 		return fmt.Errorf("failed to render input schema template: %w", err)
 	}
 
-	inputSchemaPath := filepath.Join(schemasDir, "input.json")
+	inputSchemaPath := filepath.Join(schemasDir, "input.avsc")
 	return writeFile(inputSchemaPath, inputSchema)
-}
-
-func (g *ProjectGenerator) generateOutputSchema(schemasDir string) error {
-	// Sanitize project name for AVRO namespace
-	sanitizedName := sanitizeAVROIdentifier(g.ProjectName)
-
-	templateData := templates.TemplateData{
-		ProjectName:   g.ProjectName,
-		SanitizedName: sanitizedName,
-	}
-
-	outputSchema, err := g.templateManager.RenderOutputSchema(templateData)
-	if err != nil {
-		return fmt.Errorf("failed to render output schema template: %w", err)
-	}
-
-	outputSchemaPath := filepath.Join(schemasDir, "output.json")
-	return writeFile(outputSchemaPath, outputSchema)
 }
 
 func (g *ProjectGenerator) getSQLTemplates() map[string]string {
@@ -232,15 +215,8 @@ func (g *ProjectGenerator) generateConfig() error {
 		ProjectName: g.ProjectName,
 	}
 
-	var configContent string
-	var err error
-
-	if g.LocalMode {
-		configContent, err = g.templateManager.RenderLocalConfig(templateData)
-	} else {
-		configContent, err = g.templateManager.RenderCloudConfig(templateData)
-	}
-
+	// Only use local config for now (no cloud integration)
+	configContent, err := g.templateManager.RenderLocalConfig(templateData)
 	if err != nil {
 		return fmt.Errorf("failed to render config template: %w", err)
 	}
@@ -257,6 +233,16 @@ func (g *ProjectGenerator) generateDockerFiles() error {
 
 	// Generate flink-conf.yaml
 	if err := g.generateFlinkConfig(); err != nil {
+		return err
+	}
+
+	// Generate flink-entrypoint.sh
+	if err := g.generateFlinkEntrypoint(); err != nil {
+		return err
+	}
+
+	// Download Flink connectors
+	if err := g.generateConnectors(); err != nil {
 		return err
 	}
 
@@ -287,6 +273,133 @@ func (g *ProjectGenerator) generateFlinkConfig() error {
 
 	flinkConfPath := filepath.Join(g.ProjectPath, "flink-conf.yaml")
 	return writeFile(flinkConfPath, flinkConfig)
+}
+
+func (g *ProjectGenerator) generateFlinkEntrypoint() error {
+	templateData := templates.TemplateData{}
+
+	flinkEntrypoint, err := g.templateManager.RenderFlinkEntrypoint(templateData)
+	if err != nil {
+		return fmt.Errorf("failed to render Flink entrypoint template: %w", err)
+	}
+
+	flinkEntrypointPath := filepath.Join(g.ProjectPath, "flink-entrypoint.sh")
+	if err := writeFile(flinkEntrypointPath, flinkEntrypoint); err != nil {
+		return err
+	}
+
+	// Make the script executable
+	return os.Chmod(flinkEntrypointPath, 0755)
+}
+
+// generateConnectors downloads Flink connector JAR files from the connectors.txt template
+func (g *ProjectGenerator) generateConnectors() error {
+	connectorsDir := filepath.Join(g.ProjectPath, "connectors")
+	if err := os.MkdirAll(connectorsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create connectors directory: %w", err)
+	}
+
+	// Get connectors.txt content from template
+	connectorsContent, err := g.templateManager.RenderConnectors()
+	if err != nil {
+		return fmt.Errorf("failed to render connectors template: %w", err)
+	}
+
+	// Parse URLs from content
+	urls := g.parseConnectorURLs(connectorsContent)
+	if len(urls) == 0 {
+		fmt.Println("⚠️  No connector URLs found in template")
+		return nil
+	}
+
+	fmt.Printf("📥 Downloading %d Flink connectors...\n", len(urls))
+
+	// Download each connector
+	for i, connectorURL := range urls {
+		if err := g.downloadConnector(connectorsDir, connectorURL, i+1, len(urls)); err != nil {
+			fmt.Printf("⚠️  Failed to download connector %d/%d: %v\n", i+1, len(urls), err)
+			continue
+		}
+	}
+
+	fmt.Println("✅ Connector downloads completed")
+	return nil
+}
+
+// parseConnectorURLs parses URLs from the connectors.txt content
+func (g *ProjectGenerator) parseConnectorURLs(content string) []string {
+	var urls []string
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		urls = append(urls, line)
+	}
+
+	return urls
+}
+
+// downloadConnector downloads a single connector JAR file
+func (g *ProjectGenerator) downloadConnector(connectorsDir, connectorURL string, current, total int) error {
+	// Parse URL to get filename
+	parsedURL, err := url.Parse(connectorURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Extract filename from URL path
+	filename := filepath.Base(parsedURL.Path)
+	if filename == "" || filename == "." {
+		return fmt.Errorf("could not extract filename from URL")
+	}
+
+	targetPath := filepath.Join(connectorsDir, filename)
+
+	// Check if file already exists
+	if _, err := os.Stat(targetPath); err == nil {
+		fmt.Printf("  📦 %d/%d: %s (already exists)\n", current, total, filename)
+		return nil
+	}
+
+	// Download the file
+	fmt.Printf("  📥 %d/%d: %s\n", current, total, filename)
+
+	resp, err := http.Get(connectorURL)
+	if err != nil {
+		return fmt.Errorf("failed to download: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("failed to close response body: %v\n", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status: %d", resp.StatusCode)
+	}
+
+	// Create the target file
+	file, err := os.Create(targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("failed to close file: %v\n", err)
+		}
+	}()
+
+	// Copy the response body to the file
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
 }
 
 // generateREADME creates comprehensive documentation for the generated project

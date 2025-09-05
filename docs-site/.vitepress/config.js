@@ -32,7 +32,6 @@ export default defineConfig({
         items: [
           { text: 'Configuration', link: '/configuration' },
           { text: 'Traffic Patterns', link: '/traffic-patterns' },
-          { text: 'Dashboard', link: '/dashboard' },
           { text: 'AI Generation', link: '/ai-generation' },
           { text: 'Changelog', link: '/changelog' }
         ]
@@ -54,7 +53,6 @@ export default defineConfig({
           { text: 'Project Scaffolding', link: '/features/scaffolding' },
           { text: 'AI-Powered Generation', link: '/ai-generation' },
           { text: 'Traffic Patterns', link: '/traffic-patterns' },
-          { text: 'Live Dashboard', link: '/dashboard' },
           { text: 'Execution Reports', link: '/features/reports' }
         ]
       },
@@ -65,8 +63,7 @@ export default defineConfig({
           { text: 'pipegen init', link: '/commands/init' },
           { text: 'pipegen run', link: '/commands/run' },
           { text: 'pipegen deploy', link: '/commands/deploy' },
-          { text: 'pipegen validate', link: '/commands/validate' },
-          { text: 'pipegen dashboard', link: '/commands/dashboard' }
+          { text: 'pipegen validate', link: '/commands/validate' }
         ]
       },
       {

@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"pipegen/internal/docker"
 )
 
@@ -109,10 +111,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("✅ Local streaming pipeline stack deployed successfully!")
 	fmt.Println("\n📊 Services:")
-	fmt.Println("  Kafka Broker:    localhost:9092")
-	fmt.Println("  Flink WebUI:     http://localhost:8081")
+	fmt.Printf("  Kafka Broker:    %s\n", viper.GetString("bootstrap_servers"))
+	fmt.Printf("  Flink WebUI:     %s\n", viper.GetString("flink_url"))
 	if withSchemaRegistry {
-		fmt.Println("  Schema Registry: http://localhost:8082")
+		fmt.Printf("  Schema Registry: %s\n", viper.GetString("schema_registry_url"))
 	}
 	fmt.Println("\n🔧 Management commands:")
 	fmt.Printf("  View logs:       docker-compose -f %s logs -f\n", composePath)
@@ -173,15 +175,35 @@ func dockerComposeDown(projectDir string) error {
 }
 
 func waitForServices(ctx context.Context, withSchemaRegistry bool) error {
+	// Get bootstrap servers from configuration
+	bootstrapServers := viper.GetString("bootstrap_servers")
+	if bootstrapServers == "" {
+		bootstrapServers = "localhost:9092" // fallback to default
+	}
+
+	// Extract host and port from bootstrap servers
+	kafkaHostPort := bootstrapServers
+	if strings.Contains(bootstrapServers, "://") {
+		// Handle URLs like "kafka://localhost:9092"
+		parts := strings.Split(bootstrapServers, "://")
+		if len(parts) == 2 {
+			kafkaHostPort = parts[1]
+		}
+	}
+
 	services := []docker.ServiceCheck{
-		{Name: "Kafka", URL: "localhost:9092", Type: "kafka"},
-		{Name: "Flink Job Manager", URL: "http://localhost:8081", Type: "http"},
+		{Name: "Kafka", URL: kafkaHostPort, Type: "kafka"},
+		{Name: "Flink Job Manager", URL: viper.GetString("flink_url"), Type: "http"},
 	}
 
 	if withSchemaRegistry {
+		schemaRegistryURL := viper.GetString("schema_registry_url")
+		if schemaRegistryURL == "" {
+			schemaRegistryURL = "http://localhost:8082" // fallback to default
+		}
 		services = append(services, docker.ServiceCheck{
 			Name: "Schema Registry",
-			URL:  "http://localhost:8082",
+			URL:  schemaRegistryURL,
 			Type: "http",
 		})
 	}

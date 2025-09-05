@@ -43,21 +43,26 @@ Use --generate-report=false to disable report generation.`,
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().String("project-dir", ".", "Project directory path")
-	runCmd.Flags().Int("message-rate", 100, "Messages per second for producer")
-	runCmd.Flags().Duration("duration", 5*time.Minute, "Pipeline execution duration")
-	runCmd.Flags().Bool("cleanup", true, "Clean up resources after execution")
+	runCmd.Flags().Int("message-rate", 100, "Messages per second to produce")
+	runCmd.Flags().Duration("duration", 30*time.Second, "Producer execution duration")
+	runCmd.Flags().Duration("pipeline-timeout", 5*time.Minute, "Overall pipeline timeout (independent of producer duration)")
+	runCmd.Flags().Int64("expected-messages", 0, "Expected number of messages to consume before stopping (0 = auto-calculate from producer)")
+	runCmd.Flags().Bool("cleanup", true, "Clean up created topics and schemas after execution")
 	runCmd.Flags().Bool("dry-run", false, "Show what would be executed without running")
 	runCmd.Flags().Bool("dashboard", false, "Start live dashboard during pipeline execution")
 	runCmd.Flags().Int("dashboard-port", 3000, "Dashboard server port")
 	runCmd.Flags().Bool("generate-report", true, "Generate HTML execution report")
 	runCmd.Flags().String("reports-dir", "", "Directory to save execution reports (default: project-dir/reports)")
 	runCmd.Flags().String("traffic-pattern", "", "Define traffic peaks: 'start-end:rate%,start-end:rate%' (e.g., '30s-60s:300%,90s-120s:200%')")
+	runCmd.Flags().Bool("global-tables", false, "Use global table creation mode (reuse session across pipeline runs)")
 }
 
 func runPipeline(cmd *cobra.Command, args []string) error {
 	projectDir, _ := cmd.Flags().GetString("project-dir")
 	messageRate, _ := cmd.Flags().GetInt("message-rate")
 	duration, _ := cmd.Flags().GetDuration("duration")
+	pipelineTimeout, _ := cmd.Flags().GetDuration("pipeline-timeout")
+	expectedMessages, _ := cmd.Flags().GetInt64("expected-messages")
 	cleanup, _ := cmd.Flags().GetBool("cleanup")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	useDashboard, _ := cmd.Flags().GetBool("dashboard")
@@ -65,6 +70,7 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	generateReport, _ := cmd.Flags().GetBool("generate-report")
 	reportsDir, _ := cmd.Flags().GetString("reports-dir")
 	trafficPatternStr, _ := cmd.Flags().GetString("traffic-pattern")
+	globalTables, _ := cmd.Flags().GetBool("global-tables")
 
 	// Validate configuration
 	if err := validateConfig(); err != nil {
@@ -90,6 +96,8 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		ProjectDir:        projectDir,
 		MessageRate:       messageRate,
 		Duration:          duration,
+		PipelineTimeout:   pipelineTimeout,
+		ExpectedMessages:  expectedMessages,
 		Cleanup:           cleanup,
 		DryRun:            dryRun,
 		BootstrapServers:  viper.GetString("bootstrap_servers"),
@@ -99,6 +107,12 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		GenerateReport:    generateReport,
 		ReportsDir:        reportsDir,
 		TrafficPatterns:   trafficPatterns,
+		GlobalTables:      globalTables,
+		KafkaConfig: pipeline.KafkaConfig{
+			Partitions:        viper.GetInt("kafka_config.partitions"),
+			ReplicationFactor: viper.GetInt("kafka_config.replication_factor"),
+			RetentionMs:       viper.GetInt64("kafka_config.retention_ms"),
+		},
 	}
 
 	// --- NEW LOGIC: Check if stack is running, deploy if needed ---
@@ -136,7 +150,7 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	// Set up report generation if enabled
 	if config.GenerateReport {
 		reportsPath := getReportsDir(config)
-		fmt.Printf("[Runner] Report generation enabled. Reports dir: %s\n", reportsPath)
+		fmt.Printf("📊 Report generation enabled. Reports dir: %s\n", reportsPath)
 		// Create reports directory if it does not exist
 		if _, err := os.Stat(reportsPath); os.IsNotExist(err) {
 			if err := os.MkdirAll(reportsPath, 0755); err != nil {
@@ -144,11 +158,11 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 			}
 			fmt.Printf("[Runner] Created reports directory: %s\n", reportsPath)
 		}
-		reportGenerator, err := dashboard.NewExecutionReportGenerator(reportsPath)
-		if err != nil {
-			return fmt.Errorf("failed to create report generator: %w", err)
-		}
-		runner.SetReportGenerator(reportGenerator)
+		// reportGenerator, err := dashboard.NewExecutionReportGenerator(reportsPath)
+		// if err != nil {
+		// 	return fmt.Errorf("failed to create report generator: %w", err)
+		// }
+		// runner.SetReportGenerator(reportGenerator) // Temporarily disabled
 	}
 
 	// Setup graceful shutdown
@@ -207,7 +221,8 @@ func showExecutionPlan(config *pipeline.Config) error {
 		fmt.Printf("  Message Rate: %d msg/sec (constant)\n", config.MessageRate)
 	}
 
-	fmt.Printf("  Duration: %v\n", config.Duration)
+	fmt.Printf("  Producer Duration: %v\n", config.Duration)
+	fmt.Printf("  Pipeline Timeout: %v\n", config.PipelineTimeout)
 	fmt.Printf("  Bootstrap Servers: %s\n", config.BootstrapServers)
 	fmt.Printf("  Schema Registry: %s\n", config.SchemaRegistryURL)
 	fmt.Printf("  FlinkSQL URL: %s\n", config.FlinkURL)
@@ -271,15 +286,16 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	}
 
 	// Set dashboard server for SQL statement tracking
-	runner.SetDashboardServer(dashboardServer)
+	// runner.SetDashboardServer(dashboardServer) // Temporarily disabled
 
 	// Set up report generation if enabled
 	if config.GenerateReport {
-		reportGenerator, err := dashboard.NewExecutionReportGenerator(getReportsDir(config))
-		if err != nil {
-			return fmt.Errorf("failed to create report generator: %w", err)
-		}
-		runner.SetReportGenerator(reportGenerator)
+		// reportGenerator, err := dashboard.NewExecutionReportGenerator(getReportsDir(config))
+		// if err != nil {
+		// 	return fmt.Errorf("failed to create report generator: %w", err)
+		// }
+		// runner.SetReportGenerator(reportGenerator) // Temporarily disabled
+		fmt.Println("📊 Report generation is currently disabled")
 	}
 
 	// Setup graceful shutdown

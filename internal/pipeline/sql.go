@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -204,19 +205,62 @@ type StatementExecution struct {
 	Error        string
 }
 
-// PrepareExecution prepares a statement for execution with variable substitution
-func (loader *SQLLoader) PrepareExecution(statement *types.SQLStatement, variables map[string]string) *StatementExecution {
-	processedSQL := statement.Content
+// ExtractTopicsFromSQL extracts topic names from CREATE TABLE statements
+func (loader *SQLLoader) ExtractTopicsFromSQL(statements []*types.SQLStatement) []string {
+	var topics []string
+	topicSet := make(map[string]bool) // Use map to avoid duplicates
 
-	// Substitute variables
-	for key, value := range variables {
-		processedSQL = strings.ReplaceAll(processedSQL, key, value)
+	for _, stmt := range statements {
+		// Look for CREATE TABLE statements
+		if strings.Contains(strings.ToUpper(stmt.Content), "CREATE TABLE") {
+			topic := loader.extractTopicFromCreateTable(stmt.Content)
+			if topic != "" && !topicSet[topic] {
+				topics = append(topics, topic)
+				topicSet[topic] = true
+			}
+		}
 	}
 
-	return &StatementExecution{
-		Statement:    statement,
-		Variables:    variables,
-		ProcessedSQL: processedSQL,
-		Status:       "PREPARED",
+	return topics
+}
+
+// extractTopicFromCreateTable extracts topic name from a CREATE TABLE statement
+func (loader *SQLLoader) extractTopicFromCreateTable(sql string) string {
+	// Look for 'topic' = 'value' pattern
+	lines := strings.Split(sql, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "'topic'") && strings.Contains(line, "=") {
+			// Use regex to extract the topic value more reliably
+			re := regexp.MustCompile(`'topic'\s*=\s*'([^']+)'`)
+			matches := re.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				return matches[1]
+			}
+
+			// Fallback to the old method if regex fails
+			parts := strings.Split(line, "'topic'")
+			if len(parts) > 1 {
+				afterTopic := parts[1]
+				if strings.Contains(afterTopic, "=") {
+					valueParts := strings.Split(afterTopic, "=")
+					if len(valueParts) > 1 {
+						value := strings.TrimSpace(valueParts[1])
+						// Find the content between single quotes
+						start := strings.Index(value, "'")
+						if start != -1 {
+							end := strings.Index(value[start+1:], "'")
+							if end != -1 {
+								topic := value[start+1 : start+1+end]
+								fmt.Printf("DEBUG: Extracted topic using fallback: %s\n", topic)
+								return topic
+							}
+						}
+					}
+				}
+			}
+		}
 	}
+
+	return ""
 }

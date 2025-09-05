@@ -21,6 +21,25 @@ pipegen run --message-rate 100 --duration 10m \
   --dashboard --generate-report
 ```
 
+### Smart Consumer Examples
+```bash
+# Auto-calculate expected messages (recommended)
+pipegen run --duration 30s
+# Producer sends 2,847 messages → Consumer expects 2,847 messages
+
+# Precise control for testing
+pipegen run --expected-messages 1000 --message-rate 200
+# Consumer stops immediately after consuming exactly 1,000 messages
+
+# Development with fast cycles
+pipegen run --duration 10s --pipeline-timeout 2m
+# Producer runs 10s, pipeline has 2m total to complete
+
+# Production simulation with realistic timing
+pipegen run --duration 5m --pipeline-timeout 30m --expected-messages 50000
+# Long producer run with ample processing time
+```
+
 ### AI-Generated Pipeline
 ```bash
 # Let AI create a fraud detection system

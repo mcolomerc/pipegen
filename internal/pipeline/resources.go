@@ -3,7 +3,11 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
+
+	"pipegen/internal/types"
 
 	"github.com/google/uuid"
 )
@@ -19,26 +23,66 @@ type Resources struct {
 // ResourceManager handles creation and cleanup of pipeline resources
 type ResourceManager struct {
 	config *Config
+	Kafka  *KafkaService
+}
+
+// DeleteSchemas removes schemas from Schema Registry
+func (rm *ResourceManager) DeleteSchemas(ctx context.Context, resources *Resources, schemas map[string]*Schema) error {
+	fmt.Println("🗑️  Deleting schemas from Schema Registry...")
+	for name := range schemas {
+		subject := rm.getSchemaSubject(resources, name)
+		// TODO: Implement actual Schema Registry API call to delete schema
+		fmt.Printf("    🗑️  Deleting schema for subject: %s\n", subject)
+		// Simulated deletion
+	}
+	return nil
 }
 
 // NewResourceManager creates a new resource manager
 func NewResourceManager(config *Config) *ResourceManager {
+	broker := config.BootstrapServers
+	ks := NewKafkaService(broker)
 	return &ResourceManager{
 		config: config,
+		Kafka:  ks,
 	}
 }
 
-// GenerateResources creates resource names based on mode
-func (rm *ResourceManager) GenerateResources() (*Resources, error) {
+// GenerateResources creates resource names based on mode and SQL statements
+func (rm *ResourceManager) GenerateResources(statements []*types.SQLStatement) (*Resources, error) {
+	// First, try to extract topics from SQL statements
+	sqlTopics := rm.extractTopicsFromSQL(statements)
+
 	if rm.config.LocalMode {
-		// For local mode, use fixed topic names that match deployment
-		resources := &Resources{
-			Prefix:      "pipegen-local",
-			InputTopic:  "input-events",
-			OutputTopic: "output-results",
-			Topics:      []string{"input-events", "output-results"},
+		if len(sqlTopics) > 0 {
+			// Use topics from SQL statements
+			resources := &Resources{
+				Prefix: "pipegen-local",
+				Topics: sqlTopics,
+			}
+
+			// Set input and output topics if we can identify them
+			if len(sqlTopics) >= 2 {
+				resources.InputTopic = sqlTopics[0]
+				resources.OutputTopic = sqlTopics[len(sqlTopics)-1]
+			} else if len(sqlTopics) == 1 {
+				resources.InputTopic = sqlTopics[0]
+				resources.OutputTopic = sqlTopics[0] // Same topic for input/output
+			}
+
+			fmt.Printf("📋 Using topics from SQL statements: %v\n", sqlTopics)
+			return resources, nil
+		} else {
+			// Fallback to default topics
+			fmt.Println("📋 No topics found in SQL statements, using default topics")
+			resources := &Resources{
+				Prefix:      "pipegen-local",
+				InputTopic:  "input-events",
+				OutputTopic: "output-results",
+				Topics:      []string{"input-events", "output-results", "processed-events"},
+			}
+			return resources, nil
 		}
-		return resources, nil
 	}
 
 	// For cloud mode, generate unique resource names to avoid conflicts
@@ -46,44 +90,123 @@ func (rm *ResourceManager) GenerateResources() (*Resources, error) {
 	shortUUID := uuid.New().String()[:8]
 	prefix := fmt.Sprintf("pipegen-%s-%s", timestamp, shortUUID)
 
+	if len(sqlTopics) > 0 {
+		// Use SQL topics with cloud prefix
+		var cloudTopics []string
+		for _, topic := range sqlTopics {
+			cloudTopics = append(cloudTopics, fmt.Sprintf("%s-%s", prefix, topic))
+		}
+
+		resources := &Resources{
+			Prefix: prefix,
+			Topics: cloudTopics,
+		}
+
+		if len(cloudTopics) >= 2 {
+			resources.InputTopic = cloudTopics[0]
+			resources.OutputTopic = cloudTopics[len(cloudTopics)-1]
+		}
+
+		return resources, nil
+	}
+
+	// Fallback to default cloud topics
 	inputTopic := fmt.Sprintf("%s-input", prefix)
 	outputTopic := fmt.Sprintf("%s-output", prefix)
+	processedTopic := fmt.Sprintf("%s-processed", prefix)
 
 	resources := &Resources{
 		Prefix:      prefix,
 		InputTopic:  inputTopic,
 		OutputTopic: outputTopic,
-		Topics:      []string{inputTopic, outputTopic},
+		Topics:      []string{inputTopic, outputTopic, processedTopic},
 	}
 
 	return resources, nil
 }
 
+// extractTopicsFromSQL extracts topic names from CREATE TABLE statements
+func (rm *ResourceManager) extractTopicsFromSQL(statements []*types.SQLStatement) []string {
+	var topics []string
+	topicSet := make(map[string]bool) // Use map to avoid duplicates
+
+	for _, stmt := range statements {
+		// Look for CREATE TABLE statements
+		if strings.Contains(strings.ToUpper(stmt.Content), "CREATE TABLE") {
+			topic := rm.extractTopicFromCreateTable(stmt.Content)
+			if topic != "" && !topicSet[topic] {
+				topics = append(topics, topic)
+				topicSet[topic] = true
+			}
+		}
+	}
+
+	return topics
+}
+
+// extractTopicFromCreateTable extracts topic name from a CREATE TABLE statement
+func (rm *ResourceManager) extractTopicFromCreateTable(sql string) string {
+	// Look for 'topic' = 'value' pattern
+	lines := strings.Split(sql, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "'topic'") && strings.Contains(line, "=") {
+			// Use regex to extract the topic value more reliably
+			re := regexp.MustCompile(`'topic'\s*=\s*'([^']+)'`)
+			matches := re.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				return matches[1]
+			}
+
+			// Fallback to the old method if regex fails
+			parts := strings.Split(line, "'topic'")
+			if len(parts) > 1 {
+				afterTopic := parts[1]
+				if strings.Contains(afterTopic, "=") {
+					valueParts := strings.Split(afterTopic, "=")
+					if len(valueParts) > 1 {
+						value := strings.TrimSpace(valueParts[1])
+						// Find the content between single quotes
+						start := strings.Index(value, "'")
+						if start != -1 {
+							end := strings.Index(value[start+1:], "'")
+							if end != -1 {
+								return value[start+1 : start+1+end]
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
 // CreateTopics creates the required Kafka topics
 func (rm *ResourceManager) CreateTopics(ctx context.Context, resources *Resources) error {
 	fmt.Printf("🔧 Creating topics with prefix: %s\n", resources.Prefix)
-
 	for _, topic := range resources.Topics {
-		if err := rm.createTopic(ctx, topic); err != nil {
+		cfg := rm.GetDefaultTopicConfig(topic)
+		err := rm.Kafka.CreateTopic(ctx, topic, cfg.Partitions, cfg.ReplicationFactor)
+		if err != nil {
 			return fmt.Errorf("failed to create topic %s: %w", topic, err)
 		}
 		fmt.Printf("  ✅ Created topic: %s\n", topic)
 	}
-
 	return nil
 }
 
 // DeleteTopics removes the created Kafka topics
 func (rm *ResourceManager) DeleteTopics(ctx context.Context, resources *Resources) error {
 	fmt.Printf("🗑️  Deleting topics with prefix: %s\n", resources.Prefix)
-
 	for _, topic := range resources.Topics {
-		if err := rm.deleteTopic(ctx, topic); err != nil {
+		err := rm.Kafka.DeleteTopic(ctx, topic)
+		if err != nil {
 			return fmt.Errorf("failed to delete topic %s: %w", topic, err)
 		}
 		fmt.Printf("  ✅ Deleted topic: %s\n", topic)
 	}
-
 	return nil
 }
 
@@ -98,38 +221,6 @@ func (rm *ResourceManager) RegisterSchemas(ctx context.Context, resources *Resou
 		}
 		fmt.Printf("  ✅ Registered schema: %s -> %s\n", name, subject)
 	}
-
-	return nil
-}
-
-// createTopic creates a single Kafka topic using Confluent Cloud Admin API
-func (rm *ResourceManager) createTopic(ctx context.Context, topicName string) error {
-	// TODO: Implement actual Kafka Admin API call
-	// This is a placeholder for the actual implementation
-
-	// Simulated topic creation
-	fmt.Printf("    📝 Creating topic: %s\n", topicName)
-
-	// Here you would use the Confluent Cloud Admin API or Kafka Admin Client
-	// to create the topic with appropriate configuration:
-	// - Partitions: 3 (configurable)
-	// - Replication factor: 3 (for production)
-	// - Retention: 7 days (configurable)
-	// - Cleanup policy: delete
-
-	return nil
-}
-
-// deleteTopic removes a single Kafka topic
-func (rm *ResourceManager) deleteTopic(ctx context.Context, topicName string) error {
-	// TODO: Implement actual Kafka Admin API call
-	// This is a placeholder for the actual implementation
-
-	// Simulated topic deletion
-	fmt.Printf("    🗑️  Deleting topic: %s\n", topicName)
-
-	// Here you would use the Confluent Cloud Admin API or Kafka Admin Client
-	// to delete the topic
 
 	return nil
 }
@@ -175,10 +266,10 @@ type TopicConfig struct {
 func (rm *ResourceManager) GetDefaultTopicConfig(topicName string) *TopicConfig {
 	return &TopicConfig{
 		Name:              topicName,
-		Partitions:        3,
-		ReplicationFactor: 3,
+		Partitions:        rm.config.KafkaConfig.Partitions,
+		ReplicationFactor: rm.config.KafkaConfig.ReplicationFactor,
 		Config: map[string]string{
-			"retention.ms":     "604800000", // 7 days
+			"retention.ms":     fmt.Sprintf("%d", rm.config.KafkaConfig.RetentionMs),
 			"cleanup.policy":   "delete",
 			"compression.type": "snappy",
 		},

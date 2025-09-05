@@ -1,18 +1,16 @@
--- Create source table for input events
-CREATE TABLE input_events (
-  event_id STRING,
-  event_type STRING,
-  user_id STRING,
-  ts TIMESTAMP(3),
-  properties MAP<STRING, STRING>,
-  WATERMARK FOR ts AS ts - INTERVAL '5' SECOND
-) WITH ( 
+-- Create source table for Kafka stream with AVRO format
+CREATE TABLE transactions_v4 (
+  `name` STRING,
+  `amount` INT
+) WITH (
   'connector' = 'kafka',
-  'topic' = 'input-events',
-  'properties.bootstrap.servers' = 'localhost:9092',
-  'format' = 'avro',
-  'avro-confluent.schema-registry.url' = 'http://localhost:8082',
+  'topic' = 'transactions',
+  'properties.bootstrap.servers' = 'broker:29092',
+  'properties.group.id' = 'flink_table_transactions_v4',
   'scan.startup.mode' = 'earliest-offset',
-  'value.format' = 'avro'
+  'properties.auto.offset.reset' = 'earliest',
+  'properties.enable.auto.commit' = 'true',
+  'format' = 'avro-confluent',
+  'avro-confluent.url' = 'http://schema-registry:8082'
 );
 

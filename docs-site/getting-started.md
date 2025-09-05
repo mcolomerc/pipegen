@@ -72,41 +72,66 @@ pipegen deploy
 ```
 
 This starts:
-- **Apache Kafka** (localhost:9092)
-- **Apache Flink** (localhost:8081) 
+- **Apache Kafka** (localhost:9093)
+- **Apache Flink** (localhost:8081)
 - **Schema Registry** (localhost:8082)
-- **Flink Web UI** (localhost:8081)
+- **Flink SQL Gateway** (localhost:8083)
 
 ### Step 3: Run Your Pipeline
 
 ```bash
-# Basic execution
+# Basic execution (generates automatic report)
 pipegen run
 
-# With live dashboard
-pipegen run --dashboard
+# With custom report directory
+pipegen run --reports-dir ./execution-reports
 
 # With traffic pattern simulation
-pipegen run --message-rate 100 --duration 5m --traffic-pattern "1m-2m:300%,3m-4m:200%"
+pipegen run --message-rate 100 --duration 5m \
+  --traffic-pattern "1m-2m:300%,3m-4m:200%"
+
+# Quick validation run
+pipegen run --duration 1m --message-rate 10
+
+# Smart consumer stopping (stops early when expected messages consumed)
+pipegen run --expected-messages 500 --message-rate 50
 ```
 
 ### Step 4: Monitor & Analyze
 
-- **Live Dashboard**: `http://localhost:3000` (if using `--dashboard`)
-- **Flink Web UI**: `http://localhost:8081`
-- **Execution Reports**: Generated in `reports/` directory
+- **[Execution Reports](./features/reports.md)** - Comprehensive HTML reports with charts and metrics
+- **Flink Web UI**: `http://localhost:8081` - Monitor jobs, checkpoints, and metrics
+- **Schema Registry**: `http://localhost:8082` - Manage AVRO schemas
+- **Flink SQL Gateway**: `http://localhost:8083` - SQL Gateway REST API
+
+#### Docker Services Overview
+The local development stack includes these services and ports:
+
+| Service | Container Port | Host Port | Purpose |
+|---------|----------------|-----------|---------|
+| **Kafka Broker** | 9092 | 9093 | Message streaming |
+| **Flink JobManager** | 8081 | 8081 | Cluster coordination & Web UI |
+| **Schema Registry** | 8082 | 8082 | AVRO schema management |
+| **Flink SQL Gateway** | 8083 | 8083 | SQL API endpoint |
+
+**Connection URLs for applications:**
+- Kafka: `localhost:9093`
+- Flink: `http://localhost:8081`
+- Schema Registry: `http://localhost:8082`
+- SQL Gateway: `http://localhost:8083`
 
 ## What Happens During Execution?
 
 1. **🔍 Project Validation** - Checks SQL syntax, schema format, and configuration
 2. **🏷️ Dynamic Naming** - Generates unique topic names to avoid conflicts
 3. **📝 Topic Creation** - Creates Kafka topics based on your schemas
-4. **📋 Schema Registration** - Registers AVRO schemas with Schema Registry  
+4. **📋 Schema Registration** - Registers AVRO schemas with Schema Registry
 5. **⚡ FlinkSQL Deployment** - Deploys your SQL statements as Flink jobs
-6. **📤 Producer Start** - Begins generating realistic test data
-7. **👂 Consumer Start** - Validates pipeline output
-8. **📊 Monitoring** - Real-time metrics collection and visualization
-9. **🧹 Cleanup** - Removes all created resources (optional)
+6. **📤 Producer Start** - Begins generating realistic test data with AVRO encoding
+7. **👂 Consumer Start** - Validates pipeline output with schema registry integration
+8. **📊 Enhanced Monitoring** - Real-time metrics with consumer group lag analysis
+9. **📄 Report Generation** - Creates detailed HTML execution reports (default)
+10. **🧹 Cleanup** - Removes all created resources (configurable)
 
 ## Common Patterns
 
@@ -120,17 +145,28 @@ pipegen run --message-rate 50 --duration 10m \
 ### Development Testing
 ```bash
 # Quick validation with cleanup
-pipegen run --message-rate 10 --duration 1m --cleanup
+pipegen run --message-rate 10 --duration 1m --cleanup=true
+
+# Test exact message count processing
+pipegen run --expected-messages 100 --message-rate 20 --timeout 5m
 ```
 
 ### Production Readiness
 ```bash
-# Generate comprehensive report
-pipegen run --message-rate 100 --duration 30m --generate-report --dashboard
+# Generate comprehensive report with separate timeouts
+pipegen run --duration 3m --timeout 15m --message-rate 100 \
+  --generate-report=true --reports-dir ./my-reports
+```
+
+### AVRO Schema Testing
+```bash
+# Test AVRO encoding with schema registry
+pipegen run --message-rate 20 --duration 2m --cleanup=false
 ```
 
 ## Next Steps
 
+- **[Run Workflow Deep Dive](./run-workflow)** - Detailed execution process and troubleshooting
 - **[Commands](./commands)** - Learn all available commands
 - **[Traffic Patterns](./traffic-patterns)** - Master load testing
 - **[Dashboard](./dashboard)** - Explore monitoring capabilities

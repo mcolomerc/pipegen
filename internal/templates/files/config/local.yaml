@@ -2,10 +2,10 @@
 # Local development mode
 local_mode: true
 
-# Kafka Configuration (local)
-bootstrap_servers: "localhost:9092"
+# Kafka Configuration (local) - Host machine access
+bootstrap_servers: "localhost:9093"
 
-# FlinkSQL Configuration (local)  
+# FlinkSQL Configuration (local)
 flink_url: "http://localhost:8081"
 
 # Schema Registry Configuration (local)
@@ -17,15 +17,22 @@ default_duration: "5m"
 topic_prefix: "{{.ProjectName}}"
 cleanup_on_exit: true
 
-# For Cloud/Confluent deployment, uncomment and configure:
-# local_mode: false
-# bootstrap_servers: "your-bootstrap-server.confluent.cloud:9092"
-# api_key: "YOUR_API_KEY"
-# api_secret: "YOUR_API_SECRET"
-# schema_registry_url: "https://your-schema-registry.confluent.cloud"
-# schema_registry_key: "YOUR_SCHEMA_REGISTRY_KEY"
-# schema_registry_secret: "YOUR_SCHEMA_REGISTRY_SECRET"
-# flink_api_key: "YOUR_FLINK_API_KEY"
-# flink_api_secret: "YOUR_FLINK_API_SECRET"
-# flink_environment: "YOUR_FLINK_ENVIRONMENT_ID"
-# flink_compute_pool: "YOUR_FLINK_COMPUTE_POOL_ID"
+# Kafka Configuration for local development
+kafka_config:
+  partitions: 1                # Default partitions for new topics (reduced for local)
+  replication_factor: 1        # Replication factor (1 for single broker)
+  retention_ms: 604800000      # 7 days retention
+
+producer_config:
+  compression_type: "snappy"   # Message compression
+  batch_size: 16384           # Batch size in bytes
+  linger_ms: 5                # Batching delay
+
+consumer_config:
+  session_timeout_ms: 30000   # Consumer session timeout
+  heartbeat_interval_ms: 3000 # Consumer heartbeat interval
+  max_poll_records: 500       # Max records per poll
+  auto_offset_reset: "earliest" # Start from beginning for new groups
+
+# Dashboard Configuration
+dashboard_auto_open: false    # Don't auto-open browser in CI/testing

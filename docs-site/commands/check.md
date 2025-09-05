@@ -197,7 +197,7 @@ Use in deployment pipelines:
 **Broker Connection Failed**
 ```bash
 # Check network connectivity
-telnet kafka-broker 9092
+telnet kafka-broker 9093
 
 # Verify broker configuration
 cat /opt/kafka/config/server.properties
@@ -206,10 +206,10 @@ cat /opt/kafka/config/server.properties
 **Topic Not Found**
 ```bash
 # List available topics
-kafka-topics.sh --bootstrap-server localhost:9092 --list
+kafka-topics.sh --bootstrap-server localhost:9093 --list
 
 # Create missing topic
-kafka-topics.sh --bootstrap-server localhost:9092 --create --topic my-topic
+kafka-topics.sh --bootstrap-server localhost:9093 --create --topic my-topic
 ```
 
 ### Flink Issues
@@ -249,7 +249,7 @@ pipegen validate --strict
 pipegen check --verbose
 
 # Monitor Kafka lag
-kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group my-group
+kafka-consumer-groups.sh --bootstrap-server localhost:9093 --describe --group my-group
 ```
 
 ## Configuration
@@ -262,12 +262,12 @@ checks:
   timeout: 30s
   retry_count: 3
   retry_delay: 5s
-  
+
 kafka:
   brokers:
-    - "localhost:9092"
+    - "localhost:9093"
   test_topic: "__pipegen_health_check"
-  
+
 flink:
   jobmanager_url: "http://localhost:8081"
   required_taskmanagers: 1

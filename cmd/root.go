@@ -50,6 +50,7 @@ func init() {
 	viper.SetDefault("bootstrap_servers", "localhost:9092")
 	viper.SetDefault("schema_registry_url", "http://localhost:8082")
 	viper.SetDefault("flink_url", "http://localhost:8081")
+	viper.SetDefault("flink_sql_gateway_url", "http://localhost:8083")
 }
 
 // initConfig reads in config file and ENV variables.

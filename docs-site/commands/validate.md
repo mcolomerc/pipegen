@@ -103,7 +103,7 @@ pipeline:
 
 kafka:
   brokers:
-    - "localhost:9092" # ✅ Valid broker format
+    - "localhost:9093" # ✅ Valid broker format
   topic: "input"       # ✅ Topic name valid
 
 flink:
@@ -169,7 +169,7 @@ CREATE TABLE source_table (
 ) WITH (
     'connector' = 'kafka',
     'topic' = 'input-topic',
-    'properties.bootstrap.servers' = 'localhost:9092',
+    'properties.bootstrap.servers' = 'localhost:9093',
     'format' = 'avro'
 );
 ```

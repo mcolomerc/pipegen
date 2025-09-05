@@ -47,22 +47,10 @@ features:
   - title: "Local Development Stack"
     details: Complete Docker-based development environment with Kafka, Flink, and Schema Registry.
     link: /getting-started#local-setup
-    
-  - title: "Real-time Monitoring"
-    details: Live dashboard with WebSocket-based metrics, pipeline visualization, and performance analytics.
-    link: /dashboard
-    
-  - title: "Dynamic Resource Management"
-    details: Automatic topic naming, schema registration, and cleanup to avoid conflicts in shared environments.
-    link: /configuration
-    
-  - title: "Comprehensive Validation"
-    details: Validate project structure, SQL syntax, AVRO schemas, and connectivity before deployment.
-    link: /commands/validate
-    
+
   - title: "Execution Reports"
-    details: Generate detailed HTML reports with charts, metrics, and pipeline diagrams for analysis.
-    link: /dashboard#reports
+    details: Professional HTML reports with interactive charts, performance metrics, and complete configuration snapshots.
+    link: /features/reports
 ---
 
 <div class="custom-container">
@@ -122,28 +110,31 @@ pipegen init fraud-detection --describe "Monitor payment transactions, detect su
 # Deploy local development stack
 pipegen deploy
 
-# Run with traffic spikes simulation
-pipegen run --message-rate 100 --duration 10m --traffic-pattern "2m-4m:400%,6m-8m:300%" --dashboard
+# Run with traffic spikes simulation and report generation
+pipegen run --message-rate 100 --duration 10m --traffic-pattern "2m-4m:400%,6m-8m:300%" --reports-dir ./reports
+
+# Or use smart consumer stopping for faster feedback
+pipegen run --expected-messages 1000 --message-rate 50
 ```
 
 </div>
 
 <div class="custom-container">
 
-## Live Dashboard & Monitoring
+## Comprehensive Execution Reports
 
 <div style="text-align: center; margin: 2rem 0;">
-  <img src="/screenshot.png" alt="PipeGen Dashboard" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+  <img src="/screenshot.png" alt="PipeGen Execution Report" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
 </div>
 
-The integrated dashboard provides real-time visibility into your streaming pipeline with:
+Every pipeline execution automatically generates professional HTML reports saved to the `reports/` folder with:
 
-- **Live metrics updates** every second via WebSocket
-- **Interactive pipeline flow** visualization  
-- **Performance analytics** with latency percentiles and throughput trends
-- **Error tracking** with resolution suggestions
-- **Data quality monitoring** and schema validation
-- **Exportable HTML reports** with comprehensive charts
+- **Performance analytics** with interactive charts and detailed metrics
+- **Complete configuration** snapshots for reproducibility
+- **Traffic pattern analysis** and load testing insights
+- **Resource utilization** tracking and system health monitoring
+- **Professional styling** ready for stakeholder sharing
+- **Timestamped filenames** for easy historical analysis
 
 </div>
 

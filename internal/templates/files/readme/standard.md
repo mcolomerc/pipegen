@@ -109,7 +109,7 @@ Set these environment variables to override defaults:
 
 ```bash
 # Kafka Configuration
-export PIPEGEN_BOOTSTRAP_SERVERS="localhost:9092"
+export PIPEGEN_BOOTSTRAP_SERVERS="localhost:9093"
 export PIPEGEN_SCHEMA_REGISTRY_URL="http://localhost:8082"
 export PIPEGEN_FLINK_URL="http://localhost:8081"
 

@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"pipegen/internal/docker"
+	"pipegen/internal/pipeline"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // cleanCmd represents the clean command
@@ -32,6 +35,7 @@ var (
 	cleanVolumes bool
 	cleanAll     bool
 	cleanForce   bool
+	cleanFlink   bool
 )
 
 func init() {
@@ -40,6 +44,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanVolumes, "volumes", false, "Remove volumes as well")
 	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Remove everything including Docker images")
 	cleanCmd.Flags().BoolVar(&cleanForce, "force", false, "Force removal without confirmation")
+	cleanCmd.Flags().BoolVar(&cleanFlink, "flink", false, "Cancel all running Flink jobs")
 }
 
 func runClean(cmd *cobra.Command, args []string) error {
@@ -87,6 +92,16 @@ func runClean(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("🧹 Cleaning up Docker resources...")
+
+	// Clean up Flink jobs if requested or if cleaning all
+	if cleanFlink || cleanAll {
+		fmt.Println("🔥 Cancelling running Flink jobs...")
+		ctx := context.Background()
+		flinkURL := viper.GetString("flink_url")
+		if err := pipeline.CancelAllRunningJobs(ctx, flinkURL); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to cancel Flink jobs: %v\n", err)
+		}
+	}
 
 	// Stop and remove containers, networks
 	if err := deployer.StopStack(); err != nil {

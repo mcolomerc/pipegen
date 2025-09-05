@@ -10,7 +10,6 @@ PipeGen provides a comprehensive set of commands for creating, managing, and mon
 | [`run`](./commands/run) | Execute complete pipeline | Testing, load testing, production runs |
 | [`deploy`](./commands/deploy) | Start local development stack | Local development environment |
 | [`validate`](./commands/validate) | Validate project structure | Pre-deployment checks |
-| [`dashboard`](./commands/dashboard) | Start monitoring dashboard | Real-time monitoring |
 | [`check`](./commands/check) | Check AI provider setup | AI configuration validation |
 | [`clean`](./commands/clean) | Clean up Docker resources | Free up system resources |
 
@@ -36,8 +35,14 @@ pipegen run
 # With traffic patterns
 pipegen run --traffic-pattern "1m-2m:300%,4m-5m:200%"
 
-# With live dashboard
-pipegen run --dashboard
+# With automatic HTML report generation
+pipegen run --reports-dir ./my-reports
+
+# Smart consumer stopping (stops after expected messages)
+pipegen run --expected-messages 1000 --duration 5m
+
+# Separate producer and overall timeouts
+pipegen run --duration 2m --timeout 10m
 
 # Dry run (preview only)
 pipegen run --dry-run
@@ -85,7 +90,7 @@ These flags are available for all commands:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--bootstrap-servers` | `localhost:9092` | Kafka bootstrap servers |
+| `--bootstrap-servers` | `localhost:9093` | Kafka bootstrap servers |
 | `--flink-url` | `http://localhost:8081` | Flink Job Manager URL |
 | `--schema-registry-url` | `http://localhost:8082` | Schema Registry URL |
 | `--config` | `$HOME/.pipegen.yaml` | Configuration file path |
@@ -109,8 +114,8 @@ pipegen --config ./my-config.yaml run
 You can also set configuration using environment variables:
 
 ```bash
-export PIPEGEN_BOOTSTRAP_SERVERS="localhost:9092"
-export PIPEGEN_FLINK_URL="http://localhost:8081" 
+export PIPEGEN_BOOTSTRAP_SERVERS="localhost:9093"
+export PIPEGEN_FLINK_URL="http://localhost:8081"
 export PIPEGEN_SCHEMA_REGISTRY_URL="http://localhost:8082"
 
 # For AI features
@@ -144,11 +149,14 @@ pipegen run --dry-run
 # 2. Basic test
 pipegen run --message-rate 10 --duration 1m
 
-# 3. Load test with patterns
+# 3. Smart stopping test (stops early when done)
+pipegen run --message-rate 50 --expected-messages 500 --timeout 5m
+
+# 4. Load test with patterns
 pipegen run --message-rate 100 --duration 5m \
   --traffic-pattern "1m-2m:300%,3m-4m:200%"
 
-# 4. Generate comprehensive report
+# 5. Generate comprehensive report
 pipegen run --message-rate 50 --duration 10m \
   --dashboard --generate-report
 ```
@@ -199,7 +207,7 @@ PipeGen uses the following configuration priority (highest to lowest):
 ### Example Configuration File
 ```yaml
 # ~/.pipegen.yaml or .pipegen.yaml
-bootstrap_servers: "localhost:9092"
+bootstrap_servers: "localhost:9093"
 flink_url: "http://localhost:8081"
 schema_registry_url: "http://localhost:8082"
 local_mode: true
@@ -247,7 +255,7 @@ PipeGen provides clear error messages and suggestions:
 💡 Tip: Ensure traffic patterns don't overlap in time
 
 # Connection issues
-❌ Error: failed to connect to Kafka at localhost:9092
+❌ Error: failed to connect to Kafka at localhost:9093
 💡 Tip: Ensure Kafka is running via 'pipegen deploy'
 ```
 

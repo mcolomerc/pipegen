@@ -240,7 +240,7 @@ mkdir -p ~/.config/pipegen
 # Create basic configuration
 cat > ~/.pipegen.yaml << EOF
 # PipeGen Global Configuration
-bootstrap_servers: "localhost:9092"
+bootstrap_servers: "localhost:9093"
 flink_url: "http://localhost:8081"
 schema_registry_url: "http://localhost:8082"
 local_mode: true

@@ -99,14 +99,14 @@ mkdir -p schemas/
 
 #### Broker Unreachable
 ```
-Error: Failed to connect to Kafka broker localhost:9092
+Error: Failed to connect to Kafka broker localhost:9093
 ```
 
 **Diagnosis:**
 ```bash
 # Test network connectivity
-telnet localhost 9092
-nc -zv localhost 9092
+telnet localhost 9093
+nc -zv localhost 9093
 
 # Check if Kafka is running
 docker ps | grep kafka
@@ -125,7 +125,7 @@ cat /opt/kafka/config/server.properties | grep listeners
 # config.yaml
 kafka:
   brokers:
-    - "correct-broker-address:9092"
+    - "correct-broker-address:9093"
 ```
 
 #### Topic Not Found
@@ -136,10 +136,10 @@ Error: Topic 'input-topic' does not exist
 **Solution:**
 ```bash
 # List existing topics
-kafka-topics.sh --bootstrap-server localhost:9092 --list
+kafka-topics.sh --bootstrap-server localhost:9093 --list
 
 # Create missing topic
-kafka-topics.sh --bootstrap-server localhost:9092 \
+kafka-topics.sh --bootstrap-server localhost:9093 \
   --create --topic input-topic \
   --partitions 3 --replication-factor 1
 
@@ -289,7 +289,7 @@ docker stats
 top -p $(pgrep -f taskmanager)
 
 # Check Kafka consumer lag
-kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+kafka-consumer-groups.sh --bootstrap-server localhost:9093 \
   --describe --group pipegen-consumer
 ```
 
@@ -414,14 +414,14 @@ Pipeline running but no data in output topic
 **Diagnosis:**
 ```bash
 # Check input topic has data
-kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+kafka-console-consumer.sh --bootstrap-server localhost:9093 \
   --topic input-topic --from-beginning
 
 # Check processing SQL logic
 cat sql/processing.sql
 
 # Verify output topic configuration
-kafka-topics.sh --bootstrap-server localhost:9092 \
+kafka-topics.sh --bootstrap-server localhost:9093 \
   --describe --topic output-topic
 ```
 
@@ -621,7 +621,7 @@ pipegen run --restore-from-checkpoint /path/to/checkpoint
 #### Recover from Kafka
 ```bash
 # Reset consumer group to replay data
-kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+kafka-consumer-groups.sh --bootstrap-server localhost:9093 \
   --group pipegen-consumer --reset-offsets --to-earliest --topic input-topic --execute
 ```
 

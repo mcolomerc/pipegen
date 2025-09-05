@@ -182,7 +182,7 @@ func runPipelineWithDashboard(ctx context.Context, config *pipeline.Config, dash
 	}
 
 	// Set dashboard server for SQL statement tracking
-	runner.SetDashboardServer(dashboardServer)
+	// runner.SetDashboardServer(dashboardServer) // Temporarily disabled
 
 	// Create dashboard status tracker
 	statusTracker := &DashboardStatusTracker{

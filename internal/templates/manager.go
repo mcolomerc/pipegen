@@ -48,10 +48,11 @@ func NewManager() (*Manager, error) {
 		{"readme_llm", "files/readme/llm.md"},
 		{"docker_compose", "files/docker/compose.yml"},
 		{"flink_config", "files/config/flink-conf.yaml"},
+		{"flink_entrypoint", "files/config/flink-entrypoint.sh"},
 		{"local_config", "files/config/local.yaml"},
-		{"cloud_config", "files/config/cloud.yaml"},
-		{"input_schema", "files/schemas/input.json"},
-		{"output_schema", "files/schemas/output.json"},
+		{"input_schema", "files/schemas/input.avsc"},
+		// Note: output_schema template removed - Flink CREATE TABLE handles output schema registration
+		{"connectors", "files/docker/connectors.txt"},
 	}
 
 	for _, tp := range templatePaths {
@@ -96,9 +97,9 @@ func (m *Manager) RenderLocalConfig(data TemplateData) (string, error) {
 	return m.render("local_config", data)
 }
 
-// RenderCloudConfig renders the cloud configuration template
-func (m *Manager) RenderCloudConfig(data TemplateData) (string, error) {
-	return m.render("cloud_config", data)
+// RenderFlinkEntrypoint renders the Flink entrypoint script template
+func (m *Manager) RenderFlinkEntrypoint(data TemplateData) (string, error) {
+	return m.render("flink_entrypoint", data)
 }
 
 // RenderInputSchema renders the input AVRO schema template
@@ -106,9 +107,12 @@ func (m *Manager) RenderInputSchema(data TemplateData) (string, error) {
 	return m.render("input_schema", data)
 }
 
-// RenderOutputSchema renders the output AVRO schema template
-func (m *Manager) RenderOutputSchema(data TemplateData) (string, error) {
-	return m.render("output_schema", data)
+// Note: RenderOutputSchema method removed since output schemas are now handled by Flink CREATE TABLE
+
+// RenderConnectors renders the connectors.txt template
+func (m *Manager) RenderConnectors() (string, error) {
+	// Connectors template doesn't need data, so we pass empty TemplateData
+	return m.render("connectors", TemplateData{})
 }
 
 // RenderSQLFiles renders SQL templates from the SQL directory

@@ -2,23 +2,31 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
+	"github.com/riferrei/srclient"
 	"github.com/segmentio/kafka-go"
 )
 
 // Producer handles Kafka message production with AVRO encoding
 type Producer struct {
-	config *Config
-	writer *kafka.Writer
-	codec  *goavro.Codec
+	config       *Config
+	writer       *kafka.Writer
+	codec        *goavro.Codec
+	srClient     *srclient.SchemaRegistryClient
+	schemaID     int
+	schema       *Schema   // Store schema for dynamic message generation
+	messageCount int64     // Track actual messages sent
+	startTime    time.Time // Track when producer started
 }
 
 // NewProducer creates a new Kafka producer
 func NewProducer(config *Config) (*Producer, error) {
+	fmt.Printf("📤 Creating producer with bootstrap servers: %s\n", config.BootstrapServers)
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(config.BootstrapServers),
 		Balancer:     &kafka.LeastBytes{},
@@ -26,10 +34,51 @@ func NewProducer(config *Config) (*Producer, error) {
 		BatchSize:    100,
 	}
 
+	fmt.Printf("  ✅ Writer configured with address: %s\n", config.BootstrapServers)
+
 	return &Producer{
-		config: config,
-		writer: writer,
+		config:       config,
+		writer:       writer,
+		srClient:     nil, // Will be initialized when schema is provided
+		messageCount: 0,
+		startTime:    time.Now(),
 	}, nil
+}
+
+// InitializeSchemaRegistry initializes the Schema Registry client and gets the existing schema
+func (p *Producer) InitializeSchemaRegistry(schema *Schema, subject string) error {
+	fmt.Printf("🔗 Initializing Schema Registry client for subject: %s\n", subject)
+
+	// Store schema for dynamic message generation
+	p.schema = schema
+
+	// Create Schema Registry client
+	p.srClient = srclient.CreateSchemaRegistryClient(p.config.SchemaRegistryURL)
+
+	// First, try to get existing schema instead of auto-registering
+	schemaObj, err := p.srClient.GetLatestSchema(subject)
+	if err != nil {
+		// If schema doesn't exist, register it manually
+		fmt.Printf("  📋 Schema not found for subject %s, registering new schema\n", subject)
+		schemaObj, err = p.srClient.CreateSchema(subject, schema.Content, srclient.Avro)
+		if err != nil {
+			return fmt.Errorf("failed to register schema: %w", err)
+		}
+		fmt.Printf("  ✅ Schema registered with ID: %d\n", schemaObj.ID())
+	} else {
+		fmt.Printf("  ✅ Using existing schema with ID: %d\n", schemaObj.ID())
+	}
+
+	p.schemaID = schemaObj.ID()
+
+	// Create AVRO codec from schema
+	codec, err := goavro.NewCodec(schema.Content)
+	if err != nil {
+		return fmt.Errorf("failed to create AVRO codec: %w", err)
+	}
+	p.codec = codec
+
+	return nil
 }
 
 // Start begins producing messages to the specified topic with support for dynamic traffic patterns
@@ -45,12 +94,11 @@ func (p *Producer) Start(ctx context.Context, topic string, schema *Schema) erro
 	// Set topic for writer
 	p.writer.Topic = topic
 
-	// Create AVRO codec from schema
-	codec, err := goavro.NewCodec(schema.Content)
-	if err != nil {
-		return fmt.Errorf("failed to create AVRO codec: %w", err)
+	// Initialize Schema Registry and register schema
+	subject := fmt.Sprintf("%s-value", topic)
+	if err := p.InitializeSchemaRegistry(schema, subject); err != nil {
+		return fmt.Errorf("failed to initialize schema registry: %w", err)
 	}
-	p.codec = codec
 
 	// Start the dynamic rate producer
 	if p.config.TrafficPatterns != nil && p.config.TrafficPatterns.HasPatterns() {
@@ -66,6 +114,7 @@ func (p *Producer) startWithTrafficPatterns(ctx context.Context, schema *Schema)
 	startTime := time.Now()
 	messageCount := 0
 	currentRate := p.config.TrafficPatterns.GetRateAt(0)
+	lastLogTime := startTime
 
 	// Create a ticker that we'll reset when rate changes
 	interval := time.Second / time.Duration(currentRate)
@@ -104,9 +153,19 @@ func (p *Producer) startWithTrafficPatterns(ctx context.Context, schema *Schema)
 			}
 
 			messageCount++
-			if messageCount%1000 == 0 {
-				fmt.Printf("📈 Sent %d messages (rate: %d msg/sec, elapsed: %v)...\n",
-					messageCount, currentRate, elapsed.Truncate(time.Second))
+			// Log progress every 5 seconds instead of every 1000 messages
+			now := time.Now()
+			if now.Sub(lastLogTime) >= 5*time.Second {
+				elapsed := now.Sub(startTime)
+				actualRate := float64(messageCount) / elapsed.Seconds()
+
+				// Update global pipeline status
+				globalPipelineStatus.Producer.MessagesSent = int64(messageCount)
+				globalPipelineStatus.Producer.Rate = actualRate
+				globalPipelineStatus.Producer.Target = currentRate
+				globalPipelineStatus.Producer.Elapsed = elapsed
+
+				lastLogTime = now
 			}
 
 		default:
@@ -140,6 +199,8 @@ func (p *Producer) startWithConstantRate(ctx context.Context, schema *Schema) er
 	defer ticker.Stop()
 
 	messageCount := 0
+	startTime := time.Now()
+	lastLogTime := startTime
 
 	for {
 		select {
@@ -155,8 +216,19 @@ func (p *Producer) startWithConstantRate(ctx context.Context, schema *Schema) er
 			}
 
 			messageCount++
-			if messageCount%1000 == 0 {
-				fmt.Printf("📈 Sent %d messages...\n", messageCount)
+			// Log progress every 5 seconds instead of every 1000 messages
+			now := time.Now()
+			if now.Sub(lastLogTime) >= 5*time.Second {
+				elapsed := now.Sub(startTime)
+				actualRate := float64(messageCount) / elapsed.Seconds()
+
+				// Update global pipeline status
+				globalPipelineStatus.Producer.MessagesSent = int64(messageCount)
+				globalPipelineStatus.Producer.Rate = actualRate
+				globalPipelineStatus.Producer.Target = p.config.MessageRate
+				globalPipelineStatus.Producer.Elapsed = elapsed
+
+				lastLogTime = now
 			}
 		}
 	}
@@ -186,6 +258,9 @@ func (p *Producer) sendMessage(ctx context.Context, schemaName string, messageCo
 		return fmt.Errorf("failed to produce message: %w", err)
 	}
 
+	// Increment the message counter
+	p.messageCount++
+
 	return nil
 }
 
@@ -201,98 +276,174 @@ func (p *Producer) generateDynamicMessage(messageID int) (map[string]interface{}
 		return nil, fmt.Errorf("AVRO codec not initialized")
 	}
 
-	// Create message with sample data for common field patterns
+	// Create message with sample data based on schema fields
 	message := make(map[string]interface{})
-	now := time.Now().UnixMilli()
 
-	// Generate values for each field based on field name patterns
-	// This approach works with any schema by detecting common field name patterns
-	fieldNames := []string{
-		"event_id", "session_id", "user_id", "page_url", "click_type",
-		"event_type", "timestamp", "timestamp_col", "properties", "metadata",
-	}
-
-	for _, fieldName := range fieldNames {
-		switch fieldName {
-		case "event_id":
-			message[fieldName] = fmt.Sprintf("event-%d", messageID)
-		case "session_id":
-			message[fieldName] = fmt.Sprintf("session-%d", rand.Intn(1000))
-		case "user_id":
-			message[fieldName] = fmt.Sprintf("user-%d", rand.Intn(1000))
-		case "page_url":
-			message[fieldName] = p.randomPageURL()
-		case "click_type":
-			message[fieldName] = p.randomClickType()
-		case "event_type":
-			message[fieldName] = p.randomEventType()
-		case "timestamp", "timestamp_col":
-			message[fieldName] = now
-		case "properties", "metadata":
-			// For AVRO union types like ["null", {"type": "map", "values": "string"}]
-			// We need to specify the type explicitly
-			properties := map[string]string{
-				"source":  "pipegen",
-				"version": "1.0",
-				"session": fmt.Sprintf("session-%d", rand.Intn(100)),
+	// Use the schema to determine which fields to generate
+	// This makes the producer work with ANY AVRO schema
+	if p.schema != nil && len(p.schema.Fields) > 0 {
+		// Generate values for each field based on the schema definition
+		for _, field := range p.schema.Fields {
+			value, err := p.generateValueForField(field, messageID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate value for field %s: %w", field.Name, err)
 			}
-			// Wrap in union type format for AVRO encoding
-			message[fieldName] = map[string]interface{}{
-				"map": properties,
-			}
+			message[field.Name] = value
 		}
+	} else {
+		// Fallback: generate common fields if schema fields are not available
+		message["name"] = fmt.Sprintf("user-%d", rand.Intn(1000))
+		message["amount"] = rand.Intn(10000)
 	}
 
 	return message, nil
 }
 
-// encodeMessage encodes a message using AVRO
+// generateValueForField generates sample data for a specific AVRO field based on its type
+func (p *Producer) generateValueForField(field SchemaField, messageID int) (interface{}, error) {
+	now := time.Now().UnixMilli()
+
+	// Handle different AVRO field types
+	switch fieldType := field.Type.(type) {
+	case string:
+		// Simple types
+		switch fieldType {
+		case "string":
+			return p.generateStringValue(field.Name, messageID), nil
+		case "int":
+			return rand.Intn(10000), nil
+		case "long":
+			return int64(now), nil
+		case "float":
+			return rand.Float32() * 1000, nil
+		case "double":
+			return rand.Float64() * 1000, nil
+		case "boolean":
+			return rand.Intn(2) == 1, nil
+		case "bytes":
+			return []byte(fmt.Sprintf("data-%d", messageID)), nil
+		default:
+			return fmt.Sprintf("value-%d", messageID), nil
+		}
+
+	case []interface{}:
+		// Union types (e.g., ["null", "string"])
+		for _, unionType := range fieldType {
+			if unionTypeStr, ok := unionType.(string); ok && unionTypeStr != "null" {
+				// Use the first non-null type
+				mockField := SchemaField{Name: field.Name, Type: unionTypeStr}
+				return p.generateValueForField(mockField, messageID)
+			}
+		}
+		return nil, nil // Return null for union types we can't handle
+
+	case map[string]interface{}:
+		// Complex types (records, maps, arrays, enums)
+		if typeValue, exists := fieldType["type"]; exists {
+			switch typeValue {
+			case "map":
+				// Generate a simple map
+				return map[string]interface{}{
+					"key1": "value1",
+					"key2": fmt.Sprintf("value-%d", messageID),
+				}, nil
+			case "array":
+				// Generate a simple array
+				return []interface{}{"item1", fmt.Sprintf("item-%d", messageID)}, nil
+			case "enum":
+				// Use first symbol from enum
+				if symbols, exists := fieldType["symbols"]; exists {
+					if symbolList, ok := symbols.([]interface{}); ok && len(symbolList) > 0 {
+						return symbolList[rand.Intn(len(symbolList))], nil
+					}
+				}
+				return "UNKNOWN", nil
+			case "record":
+				// For nested records, return a simple map
+				return map[string]interface{}{
+					"nested_field": fmt.Sprintf("nested-value-%d", messageID),
+				}, nil
+			}
+		}
+		return fmt.Sprintf("complex-value-%d", messageID), nil
+
+	default:
+		return fmt.Sprintf("default-value-%d", messageID), nil
+	}
+}
+
+// generateStringValue creates appropriate string values based on field name patterns
+func (p *Producer) generateStringValue(fieldName string, messageID int) string {
+	switch fieldName {
+	case "id", "event_id", "user_id", "session_id":
+		return fmt.Sprintf("%s-%d", fieldName, messageID)
+	case "name", "username", "user_name":
+		return fmt.Sprintf("user-%d", rand.Intn(1000))
+	case "email":
+		return fmt.Sprintf("user%d@example.com", rand.Intn(1000))
+	case "event_type", "type":
+		events := []string{"click", "view", "purchase", "signup", "login"}
+		return events[rand.Intn(len(events))]
+	case "url", "page_url":
+		pages := []string{"/home", "/product", "/checkout", "/profile", "/search"}
+		return pages[rand.Intn(len(pages))]
+	case "status":
+		statuses := []string{"active", "pending", "completed", "failed"}
+		return statuses[rand.Intn(len(statuses))]
+	case "category":
+		categories := []string{"electronics", "clothing", "books", "food", "sports"}
+		return categories[rand.Intn(len(categories))]
+	case "country", "region":
+		countries := []string{"US", "CA", "GB", "DE", "FR"}
+		return countries[rand.Intn(len(countries))]
+	default:
+		return fmt.Sprintf("%s-%d", fieldName, messageID)
+	}
+}
+
+// encodeMessage encodes a message using AVRO with Confluent Schema Registry wire format
+// or JSON format based on format detection
 func (p *Producer) encodeMessage(message map[string]interface{}) ([]byte, error) {
+	// Use AVRO format if codec is available (Schema Registry initialized)
+	if p.codec != nil {
+		return p.encodeMessageAVRO(message)
+	}
+	// Fall back to JSON format if no codec available
+	return p.encodeMessageJSON(message)
+}
+
+// encodeMessageJSON encodes a message as JSON
+func (p *Producer) encodeMessageJSON(message map[string]interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(message)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode JSON: %w", err)
+	}
+	return jsonData, nil
+}
+
+// encodeMessageAVRO encodes a message using AVRO with Confluent Schema Registry wire format
+func (p *Producer) encodeMessageAVRO(message map[string]interface{}) ([]byte, error) {
 	// Convert map to AVRO-compatible format
 	avroData, err := p.codec.BinaryFromNative(nil, message)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode AVRO binary: %w", err)
 	}
 
-	return avroData, nil
-}
+	// Create Confluent wire format:
+	// Magic byte (0x00) + Schema ID (4 bytes, big-endian) + Avro data
+	wireFormat := make([]byte, 1+4+len(avroData))
+	wireFormat[0] = 0x00 // Magic byte
 
-// randomPageURL returns a random page URL for sample data
-func (p *Producer) randomPageURL() string {
-	pages := []string{
-		"/home",
-		"/products",
-		"/products/electronics",
-		"/products/clothing",
-		"/cart",
-		"/checkout",
-		"/profile",
-		"/search",
-		"/contact",
-		"/about",
-	}
-	return pages[rand.Intn(len(pages))]
-}
+	// Schema ID in big-endian format
+	wireFormat[1] = byte(p.schemaID >> 24)
+	wireFormat[2] = byte(p.schemaID >> 16)
+	wireFormat[3] = byte(p.schemaID >> 8)
+	wireFormat[4] = byte(p.schemaID)
 
-// randomClickType returns a random click type for sample data
-func (p *Producer) randomClickType() string {
-	clickTypes := []string{"BUTTON", "LINK", "IMAGE", "MENU"}
-	return clickTypes[rand.Intn(len(clickTypes))]
-}
+	// Copy Avro data
+	copy(wireFormat[5:], avroData)
 
-// randomEventType returns a random event type for sample data
-func (p *Producer) randomEventType() string {
-	eventTypes := []string{
-		"page_view",
-		"button_click",
-		"form_submit",
-		"purchase",
-		"add_to_cart",
-		"search",
-		"login",
-		"logout",
-	}
-	return eventTypes[rand.Intn(len(eventTypes))]
+	return wireFormat, nil
 }
 
 // Close gracefully shuts down the producer
@@ -313,12 +464,17 @@ type ProducerStats struct {
 
 // GetStats returns current producer statistics
 func (p *Producer) GetStats() *ProducerStats {
-	// TODO: Implement actual statistics collection
+	elapsed := time.Since(p.startTime)
+	var messagesPerSec float64
+	if elapsed.Seconds() > 0 {
+		messagesPerSec = float64(p.messageCount) / elapsed.Seconds()
+	}
+
 	return &ProducerStats{
-		MessagesSent:    0,
-		MessagesPerSec:  0,
-		BytesSent:       0,
-		ErrorCount:      0,
+		MessagesSent:    p.messageCount,
+		MessagesPerSec:  messagesPerSec,
+		BytesSent:       p.messageCount * 1024, // Estimate 1KB per message
+		ErrorCount:      0,                     // TODO: Track actual errors
 		LastMessageTime: time.Now(),
 	}
 }
