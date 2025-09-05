@@ -24,6 +24,7 @@ func TestValidateProjectStructure(t *testing.T) {
 				_ = os.MkdirAll(filepath.Join(tmpDir, "sql", "cloud"), 0755)
 				_ = os.MkdirAll(filepath.Join(tmpDir, "schemas"), 0755)
 				_ = os.MkdirAll(filepath.Join(tmpDir, "config"), 0755)
+				_ = os.MkdirAll(filepath.Join(tmpDir, "connectors"), 0755)
 
 				// Create required files
 				_ = os.WriteFile(filepath.Join(tmpDir, "schemas", "input.json"), []byte(`{"type": "record"}`), 0644)
@@ -31,6 +32,8 @@ func TestValidateProjectStructure(t *testing.T) {
 				_ = os.WriteFile(filepath.Join(tmpDir, "config", "local.yaml"), []byte("test: true"), 0644)
 				// Create the required .pipegen.yaml file
 				_ = os.WriteFile(filepath.Join(tmpDir, ".pipegen.yaml"), []byte("version: 1.0"), 0644)
+				// Create the required flink-entrypoint.sh file
+				_ = os.WriteFile(filepath.Join(tmpDir, "flink-entrypoint.sh"), []byte("#!/bin/bash\necho 'test'"), 0644)
 
 				return tmpDir
 			},
