@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -91,6 +93,15 @@ type GeneratedContent struct {
 	SQLStatements map[string]string `json:"sql_statements"`
 	Description   string            `json:"description"`
 	Optimizations []string          `json:"optimizations"`
+}
+
+// FlexibleGeneratedContent for parsing flexible JSON responses
+type FlexibleGeneratedContent struct {
+	InputSchema   json.RawMessage   `json:"input_schema"`
+	OutputSchema  json.RawMessage   `json:"output_schema"`
+	SQLStatements map[string]string `json:"sql_statements"`
+	Description   json.RawMessage   `json:"description"`
+	Optimizations json.RawMessage   `json:"optimizations"`
 }
 
 // GeneratePipeline creates pipeline components from natural language description
@@ -181,7 +192,8 @@ func (s *LLMService) callOllama(ctx context.Context, prompt string) (string, err
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	// Use longer timeout for AI generation - these requests can take 2-5 minutes
+	client := &http.Client{Timeout: 300 * time.Second} // 5 minutes
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to call Ollama API: %w. Make sure Ollama is running at %s", err, s.baseURL)
@@ -221,10 +233,569 @@ func (s *LLMService) callOpenAI(ctx context.Context, prompt string) (string, err
 	return mockResponse, nil
 }
 
+// extractJSONFromMarkdown extracts JSON content from markdown-formatted responses
+func extractJSONFromMarkdown(response string) string {
+	// First, try to find JSON within markdown code blocks
+	codeBlockPattern := regexp.MustCompile("```(?:json)?\n?([^`]+)\n?```")
+	if matches := codeBlockPattern.FindStringSubmatch(response); len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+
+	// If no code blocks found, use brace counting to find complete JSON
+	if strings.Contains(response, "{") && strings.Contains(response, "}") {
+		start := strings.Index(response, "{")
+		if start == -1 {
+			return strings.TrimSpace(response)
+		}
+
+		// Count braces to find the complete JSON object
+		braceCount := 0
+		inString := false
+		escaped := false
+
+		for i := start; i < len(response); i++ {
+			char := response[i]
+
+			if escaped {
+				escaped = false
+				continue
+			}
+
+			if char == '\\' {
+				escaped = true
+				continue
+			}
+
+			if char == '"' && !escaped {
+				inString = !inString
+				continue
+			}
+
+			if !inString {
+				switch char {
+				case '{':
+					braceCount++
+				case '}':
+					braceCount--
+					if braceCount == 0 {
+						// Found complete JSON object
+						return strings.TrimSpace(response[start : i+1])
+					}
+				}
+			}
+		}
+
+		// If we didn't find a complete object, return from start to end
+		end := strings.LastIndex(response, "}") + 1
+		if start < end {
+			return strings.TrimSpace(response[start:end])
+		}
+	}
+
+	// If no JSON patterns found, return the original response
+	return strings.TrimSpace(response)
+}
+
 func (s *LLMService) parseResponse(response string) (*GeneratedContent, error) {
-	var content GeneratedContent
-	if err := json.Unmarshal([]byte(response), &content); err != nil {
+	// Clean the response by extracting JSON from markdown code blocks
+	jsonStr := extractJSONFromMarkdown(response)
+
+	// Try to fix common JSON issues
+	jsonStr = s.fixCommonJSONIssues(jsonStr)
+
+	// First try parsing with flexible schema fields
+	var flexContent FlexibleGeneratedContent
+	if err := json.Unmarshal([]byte(jsonStr), &flexContent); err != nil {
+		// If parsing fails, log the full content for debugging
+		fmt.Printf("⚠️  Failed to parse JSON response.\n")
+		fmt.Printf("Raw LLM response:\n%s\n", response)
+		fmt.Printf("Extracted JSON:\n%s\n", jsonStr)
+		fmt.Printf("Parse error: %v\n", err)
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
-	return &content, nil
+
+	// Convert to final content, handling both string and object formats for schemas
+	content := &GeneratedContent{
+		SQLStatements: flexContent.SQLStatements,
+	}
+
+	// Handle InputSchema - could be string or JSON object
+	if err := s.convertSchemaField(flexContent.InputSchema, &content.InputSchema); err != nil {
+		return nil, fmt.Errorf("failed to convert input_schema: %w", err)
+	}
+
+	// Handle OutputSchema - could be string or JSON object
+	if err := s.convertSchemaField(flexContent.OutputSchema, &content.OutputSchema); err != nil {
+		return nil, fmt.Errorf("failed to convert output_schema: %w", err)
+	}
+
+	// Handle Description - could be string or object
+	if err := s.convertDescriptionField(flexContent.Description, &content.Description); err != nil {
+		return nil, fmt.Errorf("failed to convert description: %w", err)
+	}
+
+	// Handle Optimizations - could be array of strings or array of objects
+	if err := s.convertOptimizationsField(flexContent.Optimizations, &content.Optimizations); err != nil {
+		return nil, fmt.Errorf("failed to convert optimizations: %w", err)
+	}
+
+	return content, nil
+}
+
+// fixCommonJSONIssues attempts to fix common JSON formatting issues in LLM responses
+func (s *LLMService) fixCommonJSONIssues(jsonStr string) string {
+	// Convert template literals (backticks) to proper JSON strings
+	// This handles patterns like: "key": `value` -> "key": "value"
+	jsonStr = s.convertTemplateLiterals(jsonStr)
+
+	// Fix multi-line string literals that aren't properly escaped
+	jsonStr = s.fixMultiLineStrings(jsonStr)
+
+	// Remove any opening braces followed immediately by comma: {, -> {
+	jsonStr = regexp.MustCompile(`\{\s*,`).ReplaceAllString(jsonStr, `{`)
+
+	// Remove any opening brackets followed immediately by comma: [, -> [
+	jsonStr = regexp.MustCompile(`\[\s*,`).ReplaceAllString(jsonStr, `[`)
+
+	// Remove any trailing commas before closing braces or brackets
+	jsonStr = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(jsonStr, "$1")
+
+	// Fix malformed quotes in strings (common LLM issue)
+	// Pattern like: "name": ""UserEvent\", \"fields\" -> "name": "UserEvent", "fields"
+	jsonStr = regexp.MustCompile(`""\s*([^"]+)\\"?,\s*\\?"([^"]+)"`).ReplaceAllString(jsonStr, `"$1", "$2"`)
+
+	// Remove any duplicate quotes at the start of values
+	jsonStr = regexp.MustCompile(`":\s*""`).ReplaceAllString(jsonStr, `": "`)
+
+	// Fix escaped quotes that shouldn't be escaped in JSON keys/values
+	// But be careful not to break intentionally escaped quotes in content
+	jsonStr = regexp.MustCompile(`([^\\])\\"`).ReplaceAllString(jsonStr, `$1"`)
+
+	// Ensure proper spacing around colons
+	jsonStr = regexp.MustCompile(`"(\s*):(\s*)`).ReplaceAllString(jsonStr, `"$1: `)
+
+	// DON'T try to fix missing commas automatically - this was causing the {, issue
+	// The extracted JSON should already be valid, and adding commas can break things
+	// jsonStr = regexp.MustCompile(`(":\s*[^,}\]]+)\s*\n\s*(")`).ReplaceAllString(jsonStr, `$1,`+"\n"+`$2`)
+
+	// Final cleanup: remove extra commas at the end of arrays or objects
+	jsonStr = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(jsonStr, "$1")
+
+	return strings.TrimSpace(jsonStr)
+}
+
+// fixStringConcatenation fixes JavaScript-style string concatenation in JSON
+func (s *LLMService) fixStringConcatenation(jsonStr string) string {
+	// Look for patterns like: "string1"\n + "string2"\n + "string3"
+	// and convert them to: "string1string2string3"
+
+	// Use regex to find and replace JavaScript-style concatenation
+	// Pattern: "text"\s*\+\s*"text" -> "texttext"
+	for {
+		// Find pattern: "something" + "something else"
+		pattern := regexp.MustCompile(`"([^"\\]*(\\.[^"\\]*)*)"\s*\+\s*"([^"\\]*(\\.[^"\\]*)*)"`)
+		if !pattern.MatchString(jsonStr) {
+			break
+		}
+		// Replace with concatenated string, preserving escape sequences
+		jsonStr = pattern.ReplaceAllString(jsonStr, `"$1$3"`)
+	}
+
+	// Also handle patterns where there are newlines and extra whitespace
+	// Pattern: "text"\n                        + "text" -> "texttext"
+	pattern2 := regexp.MustCompile(`"([^"\\]*(\\.[^"\\]*)*)"\s*\n\s*\+\s*"([^"\\]*(\\.[^"\\]*)*)"`)
+	for pattern2.MatchString(jsonStr) {
+		jsonStr = pattern2.ReplaceAllString(jsonStr, `"$1$3"`)
+	}
+
+	return jsonStr
+}
+
+// fixSQLStatements fixes SQL statements that are incorrectly formatted as arrays instead of strings
+func (s *LLMService) fixSQLStatements(jsonStr string) string {
+	// Look for patterns like: "filename": { "statement1", "statement2" }
+	// and convert them to: "filename": "statement1 statement2"
+
+	// Pattern to match SQL statement objects with comma-separated strings
+	pattern := regexp.MustCompile(`("[\w.-]+\.sql")\s*:\s*\{\s*("[^"]*"(?:\s*,\s*"[^"]*")*)\s*\}`)
+
+	for pattern.MatchString(jsonStr) {
+		jsonStr = pattern.ReplaceAllStringFunc(jsonStr, func(match string) string {
+			// Extract filename and statements
+			subMatches := pattern.FindStringSubmatch(match)
+			if len(subMatches) != 3 {
+				return match
+			}
+
+			filename := subMatches[1]
+			statements := subMatches[2]
+
+			// Split the comma-separated strings and join them
+			re := regexp.MustCompile(`"([^"]*)"`)
+			stmtMatches := re.FindAllStringSubmatch(statements, -1)
+
+			var joinedStatements []string
+			for _, stmtMatch := range stmtMatches {
+				if len(stmtMatch) > 1 {
+					joinedStatements = append(joinedStatements, stmtMatch[1])
+				}
+			}
+
+			// Join all statements with a space and return as a proper JSON string
+			combined := strings.Join(joinedStatements, " ")
+			return fmt.Sprintf(`%s: "%s"`, filename, combined)
+		})
+	}
+
+	// Also handle arrays: "filename": ["statement1", "statement2"]
+	arrayPattern := regexp.MustCompile(`("[\w.-]+\.sql")\s*:\s*\[\s*("[^"]*"(?:\s*,\s*"[^"]*")*)\s*\]`)
+
+	for arrayPattern.MatchString(jsonStr) {
+		jsonStr = arrayPattern.ReplaceAllStringFunc(jsonStr, func(match string) string {
+			// Extract filename and statements
+			subMatches := arrayPattern.FindStringSubmatch(match)
+			if len(subMatches) != 3 {
+				return match
+			}
+
+			filename := subMatches[1]
+			statements := subMatches[2]
+
+			// Split the comma-separated strings and join them
+			re := regexp.MustCompile(`"([^"]*)"`)
+			stmtMatches := re.FindAllStringSubmatch(statements, -1)
+
+			var joinedStatements []string
+			for _, stmtMatch := range stmtMatches {
+				if len(stmtMatch) > 1 {
+					joinedStatements = append(joinedStatements, stmtMatch[1])
+				}
+			}
+
+			// Join all statements with a newline and return as a proper JSON string
+			combined := strings.Join(joinedStatements, " ")
+			return fmt.Sprintf(`%s: "%s"`, filename, combined)
+		})
+	}
+
+	return jsonStr
+}
+
+// fixMultiLineStrings fixes JSON strings that contain unescaped newlines
+func (s *LLMService) fixMultiLineStrings(jsonStr string) string {
+	// First, fix JavaScript-style string concatenation
+	jsonStr = s.fixStringConcatenation(jsonStr)
+
+	// Fix SQL statements that are incorrectly formatted as objects
+	jsonStr = s.fixSQLStatements(jsonStr)
+
+	// Use a state machine to properly handle multi-line strings in JSON
+	result := strings.Builder{}
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		char := jsonStr[i]
+
+		if escaped {
+			result.WriteByte(char)
+			escaped = false
+			continue
+		}
+
+		if char == '\\' {
+			result.WriteByte(char)
+			escaped = true
+			continue
+		}
+
+		if char == '"' {
+			inString = !inString
+			result.WriteByte(char)
+			continue
+		}
+
+		if inString {
+			// Inside a JSON string, escape newlines and tabs
+			switch char {
+			case '\n':
+				result.WriteString(`\n`)
+			case '\r':
+				result.WriteString(`\r`)
+			case '\t':
+				result.WriteString(`\t`)
+			default:
+				result.WriteByte(char)
+			}
+		} else {
+			// Outside of strings, keep everything as-is
+			result.WriteByte(char)
+		}
+	}
+
+	return result.String()
+}
+
+// convertTemplateLiterals converts template literals (backticks) and triple quotes to proper JSON strings
+func (s *LLMService) convertTemplateLiterals(jsonStr string) string {
+	// First handle triple quotes
+	jsonStr = s.convertTripleQuotes(jsonStr)
+
+	// Then handle backticks
+	// Find patterns like: "key": `value` and convert to "key": "value"
+	// We need to be careful about nested quotes within the template literal
+
+	// Use a state machine approach to handle this properly
+	result := strings.Builder{}
+	inBackticks := false
+	inQuotes := false
+	escaped := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		char := jsonStr[i]
+
+		if escaped {
+			result.WriteByte(char)
+			escaped = false
+			continue
+		}
+
+		if char == '\\' {
+			result.WriteByte(char)
+			escaped = true
+			continue
+		}
+
+		if char == '"' && !inBackticks {
+			inQuotes = !inQuotes
+			result.WriteByte(char)
+			continue
+		}
+
+		if char == '`' && !inQuotes {
+			if !inBackticks {
+				// Start of template literal, replace with quote
+				result.WriteByte('"')
+				inBackticks = true
+			} else {
+				// End of template literal, replace with quote
+				result.WriteByte('"')
+				inBackticks = false
+			}
+			continue
+		}
+
+		if inBackticks {
+			// Inside template literal, escape any quotes
+			switch char {
+			case '"':
+				result.WriteString(`\"`)
+			case '\n':
+				result.WriteString(`\n`)
+			case '\t':
+				result.WriteString(`\t`)
+			default:
+				result.WriteByte(char)
+			}
+		} else {
+			result.WriteByte(char)
+		}
+	}
+
+	return result.String()
+}
+
+// convertTripleQuotes converts triple quotes to proper JSON strings
+func (s *LLMService) convertTripleQuotes(jsonStr string) string {
+	// Find patterns like: "key": """value""" and convert to "key": "value"
+	result := strings.Builder{}
+	i := 0
+
+	for i < len(jsonStr) {
+		// Look for triple quotes
+		if i+2 < len(jsonStr) && jsonStr[i:i+3] == `"""` {
+			// Found start of triple quote, replace with single quote
+			result.WriteByte('"')
+			i += 3
+
+			// Find the closing triple quotes
+			for i < len(jsonStr) {
+				if i+2 < len(jsonStr) && jsonStr[i:i+3] == `"""` {
+					// Found end of triple quote, replace with single quote
+					result.WriteByte('"')
+					i += 3
+					break
+				} else {
+					// Inside triple quote, escape any quotes and handle newlines
+					char := jsonStr[i]
+					switch char {
+					case '"':
+						result.WriteString(`\"`)
+					case '\n':
+						result.WriteString(`\n`)
+					case '\t':
+						result.WriteString(`\t`)
+					default:
+						result.WriteByte(char)
+					}
+					i++
+				}
+			}
+		} else {
+			result.WriteByte(jsonStr[i])
+			i++
+		}
+	}
+
+	return result.String()
+}
+
+// convertSchemaField converts a JSON RawMessage to a string, handling both string and object formats
+func (s *LLMService) convertSchemaField(raw json.RawMessage, target *string) error {
+	if len(raw) == 0 {
+		*target = ""
+		return nil
+	}
+
+	// First try to unmarshal as a string
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		*target = str
+		return nil
+	}
+
+	// If that fails, treat it as a JSON object and convert to string
+	// This handles cases where the AI returns the schema as a JSON object
+	var obj interface{}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return fmt.Errorf("schema field is neither string nor valid JSON object: %w", err)
+	}
+
+	// Convert the object back to a formatted JSON string
+	schemaBytes, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to convert schema object to string: %w", err)
+	}
+
+	*target = string(schemaBytes)
+	return nil
+}
+
+// convertDescriptionField converts description from various formats to string
+func (s *LLMService) convertDescriptionField(raw json.RawMessage, target *string) error {
+	if len(raw) == 0 {
+		*target = ""
+		return nil
+	}
+
+	// First try to unmarshal as a string
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		*target = str
+		return nil
+	}
+
+	// Try to unmarshal as an object and extract meaningful text
+	var obj map[string]interface{}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		var parts []string
+
+		// Try to extract common fields in a meaningful order
+		if title, ok := obj["title"].(string); ok {
+			parts = append(parts, title)
+		}
+		if summary, ok := obj["summary"].(string); ok {
+			parts = append(parts, summary)
+		}
+		if desc, ok := obj["description"].(string); ok {
+			parts = append(parts, desc)
+		}
+
+		// Add any other string fields
+		for key, value := range obj {
+			if key != "title" && key != "summary" && key != "description" {
+				if strVal, ok := value.(string); ok {
+					parts = append(parts, fmt.Sprintf("%s: %s", key, strVal))
+				}
+			}
+		}
+
+		if len(parts) > 0 {
+			*target = strings.Join(parts, ". ")
+			return nil
+		}
+
+		// Fallback: convert entire object to JSON string
+		objBytes, _ := json.Marshal(obj)
+		*target = string(objBytes)
+		return nil
+	}
+
+	return fmt.Errorf("description field is not a recognized format (expected string or object)")
+}
+
+// convertOptimizationsField converts optimizations from various formats to []string
+func (s *LLMService) convertOptimizationsField(raw json.RawMessage, target *[]string) error {
+	if len(raw) == 0 {
+		*target = []string{}
+		return nil
+	}
+
+	// First try to unmarshal as array of strings
+	var strArray []string
+	if err := json.Unmarshal(raw, &strArray); err == nil {
+		*target = strArray
+		return nil
+	}
+
+	// Try to unmarshal as array of objects with name/description
+	var objArray []map[string]interface{}
+	if err := json.Unmarshal(raw, &objArray); err == nil {
+		var result []string
+		for _, obj := range objArray {
+			// Try to extract meaningful text from the object
+			var text string
+			if name, ok := obj["name"].(string); ok {
+				text = name
+				if desc, ok := obj["description"].(string); ok {
+					text += ": " + desc
+				}
+			} else if desc, ok := obj["description"].(string); ok {
+				text = desc
+			} else {
+				// Fallback: convert entire object to JSON string
+				objBytes, _ := json.Marshal(obj)
+				text = string(objBytes)
+			}
+			result = append(result, text)
+		}
+		*target = result
+		return nil
+	}
+
+	// Try to unmarshal as a single object (key-value pairs)
+	var obj map[string]interface{}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		var result []string
+		for key, value := range obj {
+			if strVal, ok := value.(string); ok {
+				result = append(result, fmt.Sprintf("%s: %s", key, strVal))
+			} else {
+				// Convert non-string values to JSON
+				valBytes, _ := json.Marshal(value)
+				result = append(result, fmt.Sprintf("%s: %s", key, string(valBytes)))
+			}
+		}
+		*target = result
+		return nil
+	}
+
+	// Fallback: try as single string
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		*target = []string{str}
+		return nil
+	}
+
+	return fmt.Errorf("optimizations field is not a recognized format (expected []string, []object, or object)")
 }

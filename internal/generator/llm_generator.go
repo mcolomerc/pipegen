@@ -83,6 +83,11 @@ func (g *LLMProjectGenerator) Generate() error {
 func (g *LLMProjectGenerator) generateLLMSchemas() error {
 	schemasDir := filepath.Join(g.ProjectPath, "schemas")
 
+	// Create schemas directory if it doesn't exist
+	if err := os.MkdirAll(schemasDir, 0755); err != nil {
+		return fmt.Errorf("failed to create schemas directory: %w", err)
+	}
+
 	// Write input schema from LLM
 	inputPath := filepath.Join(schemasDir, "input_event.avsc")
 	if err := g.writeLLMSchema(inputPath, g.llmContent.InputSchema); err != nil {
@@ -115,6 +120,11 @@ func (g *LLMProjectGenerator) writeLLMSchema(path, schemaJSON string) error {
 
 func (g *LLMProjectGenerator) generateLLMSQL() error {
 	sqlDir := filepath.Join(g.ProjectPath, "sql")
+
+	// Create sql directory if it doesn't exist
+	if err := os.MkdirAll(sqlDir, 0755); err != nil {
+		return fmt.Errorf("failed to create sql directory: %w", err)
+	}
 
 	for filename, content := range g.llmContent.SQLStatements {
 		filePath := filepath.Join(sqlDir, filename)
