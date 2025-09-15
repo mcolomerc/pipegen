@@ -652,6 +652,11 @@ func (s *LLMService) fixMultiLineStrings(jsonStr string) string {
 	// Fix SQL statements that are incorrectly formatted as objects
 	jsonStr = s.fixSQLStatements(jsonStr)
 
+	// Normalize invalid backslash + whitespace sequences (line continuations) inside JSON strings
+	// Example from LLM: "...'); \\n            INSERT ..." -> replace "\\[ \t\r\n]+" with a single space
+	// This avoids invalid escapes like backslash followed by newline/space which JSON does not allow
+	jsonStr = regexp.MustCompile(`\\[ \t\r\n]+`).ReplaceAllString(jsonStr, " ")
+
 	// Use a state machine to properly handle multi-line strings in JSON
 	result := strings.Builder{}
 	inString := false
@@ -661,7 +666,19 @@ func (s *LLMService) fixMultiLineStrings(jsonStr string) string {
 		char := jsonStr[i]
 
 		if escaped {
-			result.WriteByte(char)
+			// We previously wrote a backslash. JSON only allows certain escapes.
+			// Convert newline/tab/carriage-return after a backslash to proper JSON escapes.
+			switch char {
+			case '\n':
+				result.WriteByte('n') // completes "\n"
+			case '\r':
+				result.WriteByte('r') // completes "\r"
+			case '\t':
+				result.WriteByte('t') // completes "\t"
+			default:
+				// For any other char, just write it as-is (e.g., '"', '\\', 'u', etc.)
+				result.WriteByte(char)
+			}
 			escaped = false
 			continue
 		}
