@@ -166,6 +166,31 @@ func TestLLMService_ParseResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "response with escaped JSON in schema fields",
+			response: `{
+				"input_schema": "{\"type\":\"record\",\"name\":\"UserEvent\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"event_type\",\"type\":\"string\"},{\"name\":\"timestamp\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}}]}",
+				"output_schema": "{\"type\":\"record\",\"name\":\"UserMetrics\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"event_count\",\"type\":\"long\"},{\"name\":\"window_start\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}}]}",
+				"sql_statements": {
+					"01_create_source_table.sql": "CREATE TABLE user_events (user_id STRING, event_type STRING, timestamp_col TIMESTAMP(3)) WITH ('connector' = 'kafka', 'topic' = '${INPUT_TOPIC}', 'properties.bootstrap.servers' = 'localhost:9092', 'format' = 'avro-confluent', 'avro-confluent.url' = 'http://localhost:8082')",
+					"02_create_processing.sql": "CREATE VIEW user_metrics AS SELECT user_id, COUNT(*) as event_count, TUMBLE_START(timestamp_col, INTERVAL '1' MINUTE) as window_start FROM user_events GROUP BY user_id, TUMBLE(timestamp_col, INTERVAL '1' MINUTE)"
+				},
+				"description": "Real-time user activity aggregation pipeline",
+				"optimizations": ["Consider partitioning by user_id for better parallelism", "Add watermark handling for late events"]
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "response with markdown code blocks",
+			response: "```json\n" + `{
+				"input_schema": "test schema",
+				"output_schema": "test output schema",
+				"sql_statements": {"test.sql": "SELECT * FROM test"},
+				"description": "Test description",
+				"optimizations": ["test optimization"]
+			}` + "\n```",
+			wantErr: false,
+		},
+		{
 			name:     "invalid json response",
 			response: "invalid json {",
 			wantErr:  true,
@@ -174,6 +199,17 @@ func TestLLMService_ParseResponse(t *testing.T) {
 			name:     "empty response",
 			response: "",
 			wantErr:  true,
+		},
+		{
+			name: "response with trailing comma",
+			response: `{
+				"input_schema": "test schema",
+				"output_schema": "test output schema",
+				"sql_statements": {"test.sql": "SELECT * FROM test"},
+				"description": "Test description",
+				"optimizations": ["test optimization"],
+			}`,
+			wantErr: false,
 		},
 	}
 
@@ -186,7 +222,120 @@ func TestLLMService_ParseResponse(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, content)
+				if content != nil {
+					// Verify basic structure
+					assert.NotEmpty(t, content.InputSchema)
+					assert.NotEmpty(t, content.OutputSchema)
+					assert.NotEmpty(t, content.Description)
+				}
 			}
+		})
+	}
+}
+
+func TestLLMService_FixCommonJSONIssues(t *testing.T) {
+	service := NewLLMService()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "remove trailing comma",
+			input:    `{"key": "value",}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "fix opening brace with comma",
+			input:    `{,"key": "value"}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "fix double quotes at start of value",
+			input:    `{"key": ""value"}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "valid json should remain unchanged",
+			input:    `{"key": "value", "array": ["item1", "item2"]}`,
+			expected: `{"key": "value", "array": ["item1", "item2"]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.fixCommonJSONIssues(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestLLMService_FixDoubleQuotedStrings(t *testing.T) {
+	service := NewLLMService()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "normal string should remain unchanged",
+			input:    `"key": "normal value"`,
+			expected: `"key": "normal value"`,
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "properly escaped JSON should remain unchanged",
+			input:    `"schema": "{\"type\":\"record\"}"`,
+			expected: `"schema": "{\"type\":\"record\"}"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.fixDoubleQuotedStrings(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractJSONFromMarkdown(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "json in code block",
+			input:    "```json\n{\"key\": \"value\"}\n```",
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "json without code block markers",
+			input:    `{"key": "value"}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "json in plain code block",
+			input:    "```\n{\"key\": \"value\"}\n```",
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "text with json object",
+			input:    "Here is the result: {\"key\": \"value\"} and some more text",
+			expected: `{"key": "value"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractJSONFromMarkdown(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
