@@ -129,6 +129,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to create LLM generator: %w", err)
 		}
 
+		// If user provided an input schema, set it explicitly so the file is written as canonical input.avsc
+		if inputSchemaPath != "" {
+			if b, e := os.ReadFile(inputSchemaPath); e == nil {
+				llmGen.SetInputSchemaContent(string(b))
+			}
+		}
+
 		// Print optimizations
 		if len(generatedContent.Optimizations) > 0 {
 			fmt.Println("\n💡 AI Optimization Suggestions:")
