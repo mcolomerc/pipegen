@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.0] - 2025-09-04
 
+## [1.3.0] - 2025-09-15
+
+### Added
+- Combine `--input-schema` with `--describe` to enable schema-grounded AI generation
+- New LLM flow `GeneratePipelineWithSchema` using provided AVSC/JSON
+- E2E tests covering schema+AI initialization and validation
+
+### Docs
+- Consolidated command docs to one page per command (removed `init-new`)
+- Fixed legacy/missing links with redirects: `/configuration/environment`, `/examples/analytics`, `/examples/index`
+- Sidebar “Examples & Tutorials” now points to sections on the unified `/examples` page
+
+### Verification
+- golangci-lint: pass; go fmt/mod tidy: pass; VitePress build: pass
+
 ### Added
 - **Smart Consumer Stopping**: 🎯
   - Automatic consumer termination when expected message count is reached
