@@ -27,6 +27,16 @@ pipegen init <project-name> [flags]
 </div>
 
 <div class="info-box">
+  <i class="fas fa-database icon"></i>
+  <div>
+    <strong>Schema + AI (ground AI with your schema):</strong>
+    <pre><code>pipegen init orders --input-schema ./schemas/input.avsc \
+  --describe "Join orders with customers, compute daily GMV and top-5 products"</code></pre>
+  </div>
+  
+</div>
+
+<div class="info-box">
   <i class="fas fa-cloud icon"></i>
   <div>
     <strong>Cloud-optimized setup:</strong>
