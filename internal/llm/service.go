@@ -138,6 +138,38 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
 	return s.parseResponse(response)
 }
 
+// GeneratePipelineWithSchema creates pipeline components grounded on a provided input AVRO schema
+func (s *LLMService) GeneratePipelineWithSchema(ctx context.Context, schemaJSON, description, domain string) (*GeneratedContent, error) {
+	if !s.enabled {
+		return nil, fmt.Errorf("LLM service not enabled. Set PIPEGEN_OPENAI_API_KEY or PIPEGEN_OLLAMA_MODEL environment variable")
+	}
+
+	prompt := buildPromptWithSchema(schemaJSON, description, domain)
+
+	var response string
+	var err error
+
+	switch s.provider {
+	case ProviderOllama:
+		response, err = s.callOllama(ctx, prompt)
+	case ProviderOpenAI:
+		if os.Getenv("PIPEGEN_MOCK_OPENAI") == "true" {
+			fmt.Printf("🧪 Using mock OpenAI response for testing\n")
+			response = s.getMockResponse(description)
+		} else {
+			response, err = s.callOpenAI(ctx, prompt)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported LLM provider: %s", s.provider)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("LLM generation failed: %w", err)
+	}
+
+	return s.parseResponse(response)
+}
+
 func getOpenAIModel() string {
 	if model := os.Getenv("PIPEGEN_LLM_MODEL"); model != "" {
 		return model
@@ -166,6 +198,34 @@ Requirements:
 - Optimize for performance and maintainability
 
 Return ONLY valid JSON with no markdown formatting or code blocks.`, description, domain, domain)
+}
+
+func buildPromptWithSchema(schemaJSON, description, domain string) string {
+	// Ensure schema is reasonably sized; if extremely large, we could truncate, but for now include as-is
+	return fmt.Sprintf(`You are an expert in Apache Kafka and FlinkSQL. Generate a complete streaming pipeline based on this description and the provided AVRO input schema.
+
+Description: %s
+Domain: %s
+
+Input schema (AVRO JSON):
+%s
+
+Generate a JSON response with exactly these fields:
+1. input_schema: AVRO schema as a JSON string (not an object)
+2. output_schema: AVRO schema as a JSON string (not an object)  
+3. sql_statements: Object with filename keys and FlinkSQL statement values
+4. description: Technical summary of the pipeline as a string
+5. optimizations: Array of performance optimization suggestions as strings
+
+Requirements:
+- Both schemas must be valid AVRO JSON strings
+- Use the provided input schema as canonical; do not change field names or types unless well-justified in the description
+- SQL statements should use realistic field names for the %s domain
+- Include proper FlinkSQL windowing and aggregations when applicable
+- Use modern Kafka connector syntax
+- Optimize for performance and maintainability
+
+Return ONLY valid JSON with no markdown formatting or code blocks.`, description, domain, schemaJSON, domain)
 }
 
 // OllamaRequest represents the request structure for Ollama API

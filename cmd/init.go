@@ -53,10 +53,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory %s already exists. Use --force to overwrite", projectPath)
 	}
 
-	// Validate conflicting flags
-	if inputSchemaPath != "" && description != "" {
-		return fmt.Errorf("cannot use both --input-schema and --describe flags together")
-	}
+	// Allow combining --input-schema with --describe (Issue #8)
+	// If both provided, we'll ground AI with the provided schema content
 
 	// Validate input schema file if provided
 	if inputSchemaPath != "" {
@@ -85,11 +83,23 @@ func runInit(cmd *cobra.Command, args []string) error {
 			fmt.Printf("🏢 Domain: %s\n", domain)
 		}
 
-		// Generate content with LLM
+		// Generate content with LLM (optionally grounded with input schema)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		generatedContent, err := llmService.GeneratePipeline(ctx, description, domain)
+		var generatedContent *llm.GeneratedContent
+		var err error
+
+		// If user provided an input schema, read it and ground the AI prompt with it
+		if inputSchemaPath != "" {
+			schemaBytes, readErr := os.ReadFile(inputSchemaPath)
+			if readErr != nil {
+				return fmt.Errorf("failed to read input schema file: %w", readErr)
+			}
+			generatedContent, err = llmService.GeneratePipelineWithSchema(ctx, string(schemaBytes), description, domain)
+		} else {
+			generatedContent, err = llmService.GeneratePipeline(ctx, description, domain)
+		}
 		if err != nil {
 			return fmt.Errorf("AI generation failed: %w", err)
 		}
@@ -98,8 +108,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("📊 Generated: %s\n", generatedContent.Description)
 
 		// Create generator with LLM content
+		// Prefer the user-provided schema as canonical input schema if available
+		finalInputSchema := generatedContent.InputSchema
+		if inputSchemaPath != "" {
+			if b, e := os.ReadFile(inputSchemaPath); e == nil {
+				finalInputSchema = string(b)
+			}
+		}
+
 		llmContent := &generator.LLMContent{
-			InputSchema:   generatedContent.InputSchema,
+			InputSchema:   finalInputSchema,
 			OutputSchema:  generatedContent.OutputSchema,
 			SQLStatements: generatedContent.SQLStatements,
 			Description:   generatedContent.Description,
