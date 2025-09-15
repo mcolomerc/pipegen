@@ -215,9 +215,6 @@ func (s *LLMService) callOllama(ctx context.Context, prompt string) (string, err
 }
 
 func (s *LLMService) callOpenAI(ctx context.Context, prompt string) (string, error) {
-	// Import the OpenAI client at the top of the file to avoid errors
-	// For now, we'll implement this without importing
-
 	// Create OpenAI API request
 	requestBody := map[string]interface{}{
 		"model": s.model,

@@ -85,7 +85,12 @@ func (g *LLMProjectGenerator) generateLLMSchemas() error {
 
 	// Create schemas directory if it doesn't exist
 	if err := os.MkdirAll(schemasDir, 0755); err != nil {
-		return fmt.Errorf("failed to create schemas directory: %w", err)
+		return fmt.Errorf("failed to create schemas directory %s: %w", schemasDir, err)
+	}
+
+	// Verify directory was created
+	if _, err := os.Stat(schemasDir); os.IsNotExist(err) {
+		return fmt.Errorf("schemas directory %s was not created successfully", schemasDir)
 	}
 
 	// Write input schema from LLM
@@ -104,18 +109,39 @@ func (g *LLMProjectGenerator) generateLLMSchemas() error {
 }
 
 func (g *LLMProjectGenerator) writeLLMSchema(path, schemaJSON string) error {
+	// Check if schema content is empty
+	if strings.TrimSpace(schemaJSON) == "" {
+		return fmt.Errorf("schema content is empty for path: %s", path)
+	}
+
+	// Ensure the directory exists (defensive programming)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to ensure directory exists for %s: %w", path, err)
+	}
+
 	// Parse and pretty-print the schema JSON
 	var schema interface{}
 	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return fmt.Errorf("invalid schema JSON from LLM: %w", err)
+		return fmt.Errorf("invalid schema JSON from LLM for path %s: %w\nSchema content: %s", path, err, schemaJSON)
 	}
 
 	prettyJSON, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to format schema JSON: %w", err)
+		return fmt.Errorf("failed to format schema JSON for path %s: %w", path, err)
 	}
 
-	return writeFile(path, string(prettyJSON))
+	// Use absolute path to avoid any working directory issues
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for %s: %w", path, err)
+	}
+
+	if err := os.WriteFile(absPath, prettyJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write schema file %s (abs: %s): %w", path, absPath, err)
+	}
+
+	return nil
 }
 
 func (g *LLMProjectGenerator) generateLLMSQL() error {
