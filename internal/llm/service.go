@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -119,7 +120,13 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
 	case ProviderOllama:
 		response, err = s.callOllama(ctx, prompt)
 	case ProviderOpenAI:
-		response, err = s.callOpenAI(ctx, prompt)
+		// Check if we should use mock response for testing
+		if os.Getenv("PIPEGEN_MOCK_OPENAI") == "true" {
+			fmt.Printf("🧪 Using mock OpenAI response for testing\n")
+			response = s.getMockResponse(description)
+		} else {
+			response, err = s.callOpenAI(ctx, prompt)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", s.provider)
 	}
@@ -135,7 +142,7 @@ func getOpenAIModel() string {
 	if model := os.Getenv("PIPEGEN_LLM_MODEL"); model != "" {
 		return model
 	}
-	return "gpt-4" // Default OpenAI model
+	return "gpt-4o-mini" // Default OpenAI model - affordable and widely available
 }
 
 func buildPrompt(description, domain string) string {
@@ -144,20 +151,21 @@ func buildPrompt(description, domain string) string {
 Description: %s
 Domain: %s
 
-Generate a JSON response with:
-1. input_schema: AVRO schema for input events
-2. output_schema: AVRO schema for output results  
-3. sql_statements: Map of filename to FlinkSQL statements
-4. description: Technical summary of the pipeline
-5. optimizations: Performance optimization suggestions
+Generate a JSON response with exactly these fields:
+1. input_schema: AVRO schema as a JSON string (not an object)
+2. output_schema: AVRO schema as a JSON string (not an object)  
+3. sql_statements: Object with filename keys and FlinkSQL statement values
+4. description: Technical summary of the pipeline as a string
+5. optimizations: Array of performance optimization suggestions as strings
 
-Focus on:
-- Realistic field names and types for the domain
-- Proper FlinkSQL syntax with windowing and aggregations
-- Performance-optimized schema design
-- Clear, maintainable SQL structure
+Requirements:
+- Both schemas must be valid AVRO JSON strings
+- SQL statements should use realistic field names for the %s domain
+- Include proper FlinkSQL windowing and aggregations
+- Use modern Kafka connector syntax
+- Optimize for performance and maintainability
 
-Respond only with valid JSON.`, description, domain)
+Return ONLY valid JSON with no markdown formatting or code blocks.`, description, domain, domain)
 }
 
 // OllamaRequest represents the request structure for Ollama API
@@ -213,24 +221,85 @@ func (s *LLMService) callOllama(ctx context.Context, prompt string) (string, err
 }
 
 func (s *LLMService) callOpenAI(ctx context.Context, prompt string) (string, error) {
-	// Implementation for OpenAI API call
-	// This would use the official OpenAI Go client
-	// For now, returning mock response for structure
-
-	mockResponse := `{
-		"input_schema": "{\"type\":\"record\",\"name\":\"UserEvent\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"event_type\",\"type\":\"string\"},{\"name\":\"timestamp\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}}]}",
-		"output_schema": "{\"type\":\"record\",\"name\":\"UserMetrics\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"event_count\",\"type\":\"long\"},{\"name\":\"window_start\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}}]}",
-		"sql_statements": {
-			"01_create_source_table.sql": "CREATE TABLE user_events (user_id STRING, event_type STRING, timestamp_col TIMESTAMP(3)) WITH ('connector' = 'kafka', 'topic' = '${INPUT_TOPIC}', 'properties.bootstrap.servers' = 'localhost:9092', 'format' = 'avro-confluent', 'avro-confluent.url' = 'http://localhost:8082')",
-			"02_create_processing.sql": "CREATE VIEW user_metrics AS SELECT user_id, COUNT(*) as event_count, TUMBLE_START(timestamp_col, INTERVAL '1' MINUTE) as window_start FROM user_events GROUP BY user_id, TUMBLE(timestamp_col, INTERVAL '1' MINUTE)",
-			"03_create_output_table.sql": "CREATE TABLE output_metrics (user_id STRING, event_count BIGINT, window_start TIMESTAMP(3)) WITH ('connector' = 'kafka', 'topic' = '${OUTPUT_TOPIC}', 'properties.bootstrap.servers' = 'localhost:9092', 'format' = 'avro-confluent', 'avro-confluent.url' = 'http://localhost:8082')",
-			"04_insert_results.sql": "INSERT INTO output_metrics SELECT user_id, event_count, window_start FROM user_metrics"
+	// Create OpenAI API request
+	requestBody := map[string]interface{}{
+		"model": s.model,
+		"messages": []map[string]string{
+			{
+				"role":    "user",
+				"content": prompt,
+			},
 		},
-		"description": "Real-time user activity aggregation pipeline that processes user events and calculates per-minute activity counts",
-		"optimizations": ["Consider partitioning by user_id for better parallelism", "Add watermark handling for late events", "Consider using HOP windows for overlapping metrics"]
-	}`
+		"max_tokens":      4096,
+		"temperature":     0.1, // Low temperature for more consistent output
+		"response_format": map[string]string{"type": "json_object"},
+	}
 
-	return mockResponse, nil
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal OpenAI request: %w", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create OpenAI request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+
+	// Use longer timeout for AI generation
+	client := &http.Client{Timeout: 300 * time.Second} // 5 minutes
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call OpenAI API: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		// Read the error response body for better error messages
+		body, _ := io.ReadAll(resp.Body)
+
+		// Handle specific error cases
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return "", fmt.Errorf("OpenAI API authentication failed. Please check your PIPEGEN_OPENAI_API_KEY environment variable")
+		case http.StatusTooManyRequests:
+			return "", fmt.Errorf("OpenAI API rate limit exceeded. Please try again in a few minutes")
+		case http.StatusBadRequest:
+			return "", fmt.Errorf("OpenAI API bad request (status %d): %s", resp.StatusCode, string(body))
+		default:
+			return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(body))
+		}
+	}
+
+	// Parse OpenAI response
+	var openaiResp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Error *struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+		} `json:"error"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&openaiResp); err != nil {
+		return "", fmt.Errorf("failed to decode OpenAI response: %w", err)
+	}
+
+	if openaiResp.Error != nil {
+		return "", fmt.Errorf("OpenAI API error: %s (%s)", openaiResp.Error.Message, openaiResp.Error.Type)
+	}
+
+	if len(openaiResp.Choices) == 0 {
+		return "", fmt.Errorf("OpenAI API returned no choices")
+	}
+
+	return openaiResp.Choices[0].Message.Content, nil
 }
 
 // extractJSONFromMarkdown extracts JSON content from markdown-formatted responses
@@ -342,8 +411,13 @@ func (s *LLMService) parseResponse(response string) (*GeneratedContent, error) {
 	return content, nil
 }
 
+// Helper function to truncate strings for debugging
 // fixCommonJSONIssues attempts to fix common JSON formatting issues in LLM responses
 func (s *LLMService) fixCommonJSONIssues(jsonStr string) string {
+	// First fix: Handle double-quoted strings that contain escaped quotes
+	// Pattern: "key": "\"escaped content\"" -> "key": "escaped content"
+	jsonStr = s.fixDoubleQuotedStrings(jsonStr)
+
 	// Convert template literals (backticks) to proper JSON strings
 	// This handles patterns like: "key": `value` -> "key": "value"
 	jsonStr = s.convertTemplateLiterals(jsonStr)
@@ -360,28 +434,57 @@ func (s *LLMService) fixCommonJSONIssues(jsonStr string) string {
 	// Remove any trailing commas before closing braces or brackets
 	jsonStr = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(jsonStr, "$1")
 
-	// Fix malformed quotes in strings (common LLM issue)
-	// Pattern like: "name": ""UserEvent\", \"fields\" -> "name": "UserEvent", "fields"
-	jsonStr = regexp.MustCompile(`""\s*([^"]+)\\"?,\s*\\?"([^"]+)"`).ReplaceAllString(jsonStr, `"$1", "$2"`)
-
 	// Remove any duplicate quotes at the start of values
 	jsonStr = regexp.MustCompile(`":\s*""`).ReplaceAllString(jsonStr, `": "`)
 
-	// Fix escaped quotes that shouldn't be escaped in JSON keys/values
-	// But be careful not to break intentionally escaped quotes in content
-	jsonStr = regexp.MustCompile(`([^\\])\\"`).ReplaceAllString(jsonStr, `$1"`)
-
 	// Ensure proper spacing around colons
 	jsonStr = regexp.MustCompile(`"(\s*):(\s*)`).ReplaceAllString(jsonStr, `"$1: `)
-
-	// DON'T try to fix missing commas automatically - this was causing the {, issue
-	// The extracted JSON should already be valid, and adding commas can break things
-	// jsonStr = regexp.MustCompile(`(":\s*[^,}\]]+)\s*\n\s*(")`).ReplaceAllString(jsonStr, `$1,`+"\n"+`$2`)
 
 	// Final cleanup: remove extra commas at the end of arrays or objects
 	jsonStr = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(jsonStr, "$1")
 
 	return strings.TrimSpace(jsonStr)
+}
+
+// fixDoubleQuotedStrings fixes strings that are incorrectly double-quoted with escapes
+func (s *LLMService) fixDoubleQuotedStrings(jsonStr string) string {
+	// This is a simpler approach - look for obvious patterns that need fixing
+	// Pattern: "key": "\"content\"" -> "key": "content"
+
+	// For now, let's implement a basic fix that handles the specific issue from the GitHub issue
+	// The real issue is escaped quotes in JSON values - we need to be more careful
+
+	// Simple pattern to fix the most common case
+	pattern := regexp.MustCompile(`"([^"]+)":\s*"\\?"([^"\\]*(?:\\.[^"\\]*)*?)\\?""`)
+
+	// Check if the pattern matches before attempting replacement
+	if !pattern.MatchString(jsonStr) {
+		return jsonStr
+	}
+
+	// Replace with properly formatted JSON strings
+	result := pattern.ReplaceAllStringFunc(jsonStr, func(match string) string {
+		submatches := pattern.FindStringSubmatch(match)
+		if len(submatches) != 3 {
+			return match
+		}
+
+		key := submatches[1]
+		value := submatches[2]
+
+		// Just return the original if it doesn't look like it needs fixing
+		if !strings.Contains(value, `\"`) {
+			return match
+		}
+
+		// Basic unescape and re-escape
+		value = strings.ReplaceAll(value, `\"`, `"`)
+		value = strings.ReplaceAll(value, `"`, `\"`)
+
+		return fmt.Sprintf(`"%s": "%s"`, key, value)
+	})
+
+	return result
 }
 
 // fixStringConcatenation fixes JavaScript-style string concatenation in JSON
@@ -798,4 +901,42 @@ func (s *LLMService) convertOptimizationsField(raw json.RawMessage, target *[]st
 	}
 
 	return fmt.Errorf("optimizations field is not a recognized format (expected []string, []object, or object)")
+}
+
+// getMockResponse returns a mock response for testing when OpenAI API fails
+func (s *LLMService) getMockResponse(description string) string {
+	return `{
+		"input_schema": {
+			"type": "record",
+			"name": "InputEvent",
+			"namespace": "com.example.pipeline",
+			"fields": [
+				{"name": "order_id", "type": "string"},
+				{"name": "customer_id", "type": "string"},
+				{"name": "product_id", "type": "string"},
+				{"name": "quantity", "type": "int"},
+				{"name": "price", "type": "double"},
+				{"name": "timestamp", "type": "long"}
+			]
+		},
+		"output_schema": {
+			"type": "record",
+			"name": "OutputEvent",
+			"namespace": "com.example.pipeline",
+			"fields": [
+				{"name": "order_id", "type": "string"},
+				{"name": "customer_id", "type": "string"},
+				{"name": "total_amount", "type": "double"},
+				{"name": "is_duplicate", "type": "boolean"},
+				{"name": "processed_timestamp", "type": "long"}
+			]
+		},
+		"sql_statements": {
+			"01_create_source_table": "CREATE TABLE source_table (order_id STRING, customer_id STRING, product_id STRING, quantity INT, price DOUBLE, timestamp BIGINT) WITH ('connector' = 'kafka', 'topic' = 'input-events', 'properties.bootstrap.servers' = 'localhost:9092', 'format' = 'avro');",
+			"02_create_output_table": "CREATE TABLE output_table (order_id STRING, customer_id STRING, total_amount DOUBLE, is_duplicate BOOLEAN, processed_timestamp BIGINT) WITH ('connector' = 'kafka', 'topic' = 'output-events', 'properties.bootstrap.servers' = 'localhost:9092', 'format' = 'avro');",
+			"03_create_processing": "INSERT INTO output_table SELECT order_id, customer_id, quantity * price as total_amount, false as is_duplicate, timestamp as processed_timestamp FROM source_table;"
+		},
+		"description": "E-commerce pipeline for order deduplication (mock data for testing)",
+		"optimizations": ["Use watermarks for late data handling", "Consider windowing for deduplication", "Add proper error handling"]
+	}`
 }
