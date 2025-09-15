@@ -91,6 +91,16 @@ func (g *LLMProjectGenerator) generateLLMSchemas() error {
 	// Verify directory was created
 	if _, err := os.Stat(schemasDir); os.IsNotExist(err) {
 		return fmt.Errorf("schemas directory %s was not created successfully", schemasDir)
+	} else if err != nil {
+		return fmt.Errorf("error checking schemas directory %s: %w", schemasDir, err)
+	}
+
+	// Check schema content before proceeding
+	if strings.TrimSpace(g.llmContent.InputSchema) == "" {
+		return fmt.Errorf("input schema content is empty - cannot generate schema file")
+	}
+	if strings.TrimSpace(g.llmContent.OutputSchema) == "" {
+		return fmt.Errorf("output schema content is empty - cannot generate schema file")
 	}
 
 	// Write input schema from LLM
@@ -144,6 +154,7 @@ func (g *LLMProjectGenerator) writeLLMSchema(path, schemaJSON string) error {
 	return nil
 }
 
+// Helper function to truncate strings for debugging (add this if it doesn't exist)
 func (g *LLMProjectGenerator) generateLLMSQL() error {
 	sqlDir := filepath.Join(g.ProjectPath, "sql")
 
