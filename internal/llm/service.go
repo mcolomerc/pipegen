@@ -120,13 +120,12 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
 	case ProviderOllama:
 		response, err = s.callOllama(ctx, prompt)
 	case ProviderOpenAI:
-		response, err = s.callOpenAI(ctx, prompt)
-
-		// Fallback to mock data if OpenAI fails (for development/testing)
-		if err != nil {
-			fmt.Printf("⚠️  OpenAI API failed (%v), using fallback mock data for testing\n", err)
+		// Check if we should use mock response for testing
+		if os.Getenv("PIPEGEN_MOCK_OPENAI") == "true" {
+			fmt.Printf("🧪 Using mock OpenAI response for testing\n")
 			response = s.getMockResponse(description)
-			err = nil // Clear the error since we're using fallback
+		} else {
+			response, err = s.callOpenAI(ctx, prompt)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", s.provider)
@@ -937,7 +936,7 @@ func (s *LLMService) getMockResponse(description string) string {
 			"02_create_output_table": "CREATE TABLE output_table (order_id STRING, customer_id STRING, total_amount DOUBLE, is_duplicate BOOLEAN, processed_timestamp BIGINT) WITH ('connector' = 'kafka', 'topic' = 'output-events', 'properties.bootstrap.servers' = 'localhost:9092', 'format' = 'avro');",
 			"03_create_processing": "INSERT INTO output_table SELECT order_id, customer_id, quantity * price as total_amount, false as is_duplicate, timestamp as processed_timestamp FROM source_table;"
 		},
-		"description": "E-commerce pipeline for order deduplication (fallback mock data)",
+		"description": "E-commerce pipeline for order deduplication (mock data for testing)",
 		"optimizations": ["Use watermarks for late data handling", "Consider windowing for deduplication", "Add proper error handling"]
 	}`
 }

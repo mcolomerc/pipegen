@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  broker:
+    image: apache/kafka:3.8.1
+    hostname: broker
+    container_name: broker
+    ports:
+      - 9093:9092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:29093
+      KAFKA_LISTENERS: PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      # Increase timeouts for better stability with Flink
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
+      KAFKA_REPLICA_SOCKET_TIMEOUT_MS: 30000
+      KAFKA_CONTROLLER_SOCKET_TIMEOUT_MS: 30000
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - pipegen-network
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "broker:29092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+
+  flink-jobmanager:
+    image: flink:1.18.0-scala_2.12-java11
+    hostname: flink-jobmanager
+    container_name: flink-jobmanager
+    ports:
+      - "8081:8081"
+    entrypoint: ["/flink-entrypoint.sh", "jobmanager"]
+    depends_on:
+      broker:
+        condition: service_healthy 
+    volumes:
+      - flink-data:/opt/flink/data
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+      - ./connectors:/opt/flink/lib/connectors
+      - ./flink-entrypoint.sh:/flink-entrypoint.sh
+    networks:
+      - pipegen-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flink-taskmanager:
+    image: flink:1.18.0-scala_2.12-java11
+    hostname: flink-taskmanager
+    container_name: flink-taskmanager
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    entrypoint: ["/flink-entrypoint.sh", "taskmanager"]
+    scale: 1 
+    volumes:
+      - flink-data:/opt/flink/data
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+      - ./connectors:/opt/flink/lib/connectors
+      - ./flink-entrypoint.sh:/flink-entrypoint.sh
+    networks:
+      - pipegen-network
+
+  # Flink SQL Gateway
+  sql-gateway:
+    image: flink:1.18.0-scala_2.12-java11
+    container_name: sql-gateway
+    command: >
+      sh -c " 
+      cp /opt/flink/lib/connectors/*.jar /opt/flink/lib/ && 
+      bin/sql-gateway.sh start-foreground -Dsql-gateway.endpoint.rest.address=0.0.0.0 -Dsql-gateway.endpoint.rest.port=8083 -Djobmanager.rpc.address=flink-jobmanager -Drest.address=flink-jobmanager -Drest.bind-port=8081
+      "
+    ports:
+      - "8083:8083" 
+    volumes: 
+      - ./connectors:/opt/flink/lib/connectors
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+      - ./flink-entrypoint.sh:/flink-entrypoint.sh
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    networks:
+      - pipegen-network
+
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:8.0.0
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      broker:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: broker:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8082
+    networks:
+      - pipegen-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/subjects"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+
+volumes:
+  kafka-data:
+  flink-data:
+
+networks:
+  pipegen-network:
+    driver: bridge
