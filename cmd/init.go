@@ -75,78 +75,97 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Handle AI-powered generation
 	if description != "" {
 		if !llmService.IsEnabled() {
-			return fmt.Errorf("LLM service not available. Set PIPEGEN_OPENAI_API_KEY or PIPEGEN_OLLAMA_MODEL environment variable to use --describe feature")
-		}
-
-		fmt.Printf("🤖 Generating pipeline with AI assistance (%s)...\n", llmService.GetProvider())
-		fmt.Printf("📝 Description: %s\n", description)
-		if domain != "" {
-			fmt.Printf("🏢 Domain: %s\n", domain)
-		}
-
-		// Generate content with LLM (optionally grounded with input schema)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		var generatedContent *llm.GeneratedContent
-		var err error
-
-		// If user provided an input schema, read it and ground the AI prompt with it
-		if inputSchemaPath != "" {
-			schemaBytes, readErr := os.ReadFile(inputSchemaPath)
-			if readErr != nil {
-				return fmt.Errorf("failed to read input schema file: %w", readErr)
+			// Fallback to minimal generation when AI is not available
+			fmt.Println("🤖 LLM service not available. Falling back to minimal generation.")
+			if inputSchemaPath != "" {
+				fmt.Println("📋 Using provided input schema for schema-based generation")
+			} else {
+				fmt.Println("📋 No input schema provided; generating with default schema and templates")
 			}
-			generatedContent, err = llmService.GeneratePipelineWithSchema(ctx, string(schemaBytes), description, domain)
+
+			gen, err := generator.NewProjectGenerator(projectName, projectPath, localMode)
+			if err != nil {
+				return fmt.Errorf("failed to create generator: %w", err)
+			}
+			if inputSchemaPath != "" {
+				gen.SetInputSchemaPath(inputSchemaPath)
+			}
+
+			if err := gen.Generate(); err != nil {
+				return fmt.Errorf("failed to generate project: %w", err)
+			}
 		} else {
-			generatedContent, err = llmService.GeneratePipeline(ctx, description, domain)
-		}
-		if err != nil {
-			return fmt.Errorf("AI generation failed: %w", err)
-		}
 
-		fmt.Println("✨ AI generation completed!")
-		fmt.Printf("📊 Generated: %s\n", generatedContent.Description)
-
-		// Create generator with LLM content
-		// Prefer the user-provided schema as canonical input schema if available
-		finalInputSchema := generatedContent.InputSchema
-		if inputSchemaPath != "" {
-			if b, e := os.ReadFile(inputSchemaPath); e == nil {
-				finalInputSchema = string(b)
+			fmt.Printf("🤖 Generating pipeline with AI assistance (%s)...\n", llmService.GetProvider())
+			fmt.Printf("📝 Description: %s\n", description)
+			if domain != "" {
+				fmt.Printf("🏢 Domain: %s\n", domain)
 			}
-		}
 
-		llmContent := &generator.LLMContent{
-			InputSchema:   finalInputSchema,
-			OutputSchema:  generatedContent.OutputSchema,
-			SQLStatements: generatedContent.SQLStatements,
-			Description:   generatedContent.Description,
-			Optimizations: generatedContent.Optimizations,
-		}
-		llmGen, err := generator.NewProjectGeneratorWithLLM(projectName, projectPath, localMode, llmContent)
-		if err != nil {
-			return fmt.Errorf("failed to create LLM generator: %w", err)
-		}
+			// Generate content with LLM (optionally grounded with input schema)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 
-		// If user provided an input schema, set it explicitly so the file is written as canonical input.avsc
-		if inputSchemaPath != "" {
-			if b, e := os.ReadFile(inputSchemaPath); e == nil {
-				llmGen.SetInputSchemaContent(string(b))
+			var generatedContent *llm.GeneratedContent
+			var err error
+
+			// If user provided an input schema, read it and ground the AI prompt with it
+			if inputSchemaPath != "" {
+				schemaBytes, readErr := os.ReadFile(inputSchemaPath)
+				if readErr != nil {
+					return fmt.Errorf("failed to read input schema file: %w", readErr)
+				}
+				generatedContent, err = llmService.GeneratePipelineWithSchema(ctx, string(schemaBytes), description, domain)
+			} else {
+				generatedContent, err = llmService.GeneratePipeline(ctx, description, domain)
 			}
-		}
-
-		// Print optimizations
-		if len(generatedContent.Optimizations) > 0 {
-			fmt.Println("\n💡 AI Optimization Suggestions:")
-			for _, opt := range generatedContent.Optimizations {
-				fmt.Printf("  • %s\n", opt)
+			if err != nil {
+				return fmt.Errorf("AI generation failed: %w", err)
 			}
-		}
 
-		// Generate the project using LLM generator
-		if err := llmGen.Generate(); err != nil {
-			return fmt.Errorf("failed to generate project: %w", err)
+			fmt.Println("✨ AI generation completed!")
+			fmt.Printf("📊 Generated: %s\n", generatedContent.Description)
+
+			// Create generator with LLM content
+			// Prefer the user-provided schema as canonical input schema if available
+			finalInputSchema := generatedContent.InputSchema
+			if inputSchemaPath != "" {
+				if b, e := os.ReadFile(inputSchemaPath); e == nil {
+					finalInputSchema = string(b)
+				}
+			}
+
+			llmContent := &generator.LLMContent{
+				InputSchema:   finalInputSchema,
+				OutputSchema:  generatedContent.OutputSchema,
+				SQLStatements: generatedContent.SQLStatements,
+				Description:   generatedContent.Description,
+				Optimizations: generatedContent.Optimizations,
+			}
+			llmGen, err := generator.NewProjectGeneratorWithLLM(projectName, projectPath, localMode, llmContent)
+			if err != nil {
+				return fmt.Errorf("failed to create LLM generator: %w", err)
+			}
+
+			// If user provided an input schema, set it explicitly so the file is written as canonical input.avsc
+			if inputSchemaPath != "" {
+				if b, e := os.ReadFile(inputSchemaPath); e == nil {
+					llmGen.SetInputSchemaContent(string(b))
+				}
+			}
+
+			// Print optimizations
+			if len(generatedContent.Optimizations) > 0 {
+				fmt.Println("\n💡 AI Optimization Suggestions:")
+				for _, opt := range generatedContent.Optimizations {
+					fmt.Printf("  • %s\n", opt)
+				}
+			}
+
+			// Generate the project using LLM generator
+			if err := llmGen.Generate(); err != nil {
+				return fmt.Errorf("failed to generate project: %w", err)
+			}
 		}
 	} else {
 		// Standard generation
