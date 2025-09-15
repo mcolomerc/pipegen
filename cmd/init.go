@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"pipegen/internal/generator"
 	"pipegen/internal/llm"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var initCmd = &cobra.Command{
