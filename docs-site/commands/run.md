@@ -145,7 +145,7 @@ The run command uses a YAML configuration file:
 ```yaml
 pipeline:
   name: "my-pipeline"
-  schema: "schemas/input.json"
+  schema: "schemas/input.avsc"
 
 kafka:
   brokers:

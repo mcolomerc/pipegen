@@ -194,8 +194,8 @@ my-ai-pipeline/
 │   │   └── 04_insert_results.sql          # Data flow orchestration
 │   └── cloud/                             # Cloud-ready versions
 ├── schemas/
-│   ├── input.json                         # AVRO input schema
-│   └── output.json                        # AVRO output schema  
+│   ├── input.avsc                         # AVRO input schema (canonical)
+│   └── output_result.avsc                 # AVRO output schema (AI path)  
 ├── config/
 │   ├── local.yaml                         # Local development config
 │   └── cloud.yaml                         # Production config template

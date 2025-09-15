@@ -56,8 +56,8 @@ my-first-pipeline/
 │   ├── local/             # Local development
 │   └── cloud/             # Cloud-ready templates  
 ├── schemas/               # AVRO schemas
-│   ├── input.json
-│   └── output.json
+│   ├── input.avsc         # Canonical input schema
+│   └── output_result.avsc # AI path output schema
 ├── config/                # Configuration files
 ├── docker/               # Docker Compose setup
 ├── .pipegen.yaml        # Project configuration
