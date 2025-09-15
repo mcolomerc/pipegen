@@ -25,6 +25,10 @@ pipegen init fraud-detection --describe "Monitor transactions for fraud"
 
 # Custom schema project  
 pipegen init ecommerce --input-schema ./events.avsc
+
+# Schema + AI description (ground AI with your schema)
+pipegen init orders --input-schema ./schemas/input.avsc \
+  --describe "Join orders with customers, compute daily GMV and top-5 products"
 ```
 
 ### Pipeline Execution
