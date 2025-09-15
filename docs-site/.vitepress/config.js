@@ -77,10 +77,15 @@ export default defineConfig({
       {
         text: 'Examples & Tutorials',
         items: [
-          { text: 'Quick Examples', link: '/examples' },
-          { text: 'Real-time Analytics', link: '/examples/analytics' },
-          { text: 'Fraud Detection', link: '/examples/fraud-detection' },
-          { text: 'IoT Processing', link: '/examples/iot' }
+          { text: 'Overview', link: '/examples' },
+          { text: 'Quick Examples', link: '/examples#quick-examples' },
+          { text: 'Industry Use Cases', link: '/examples#industry-use-cases' },
+          { text: 'Traffic Pattern Examples', link: '/examples#traffic-pattern-examples' },
+          { text: 'Testing Scenarios', link: '/examples#testing-scenarios' },
+          { text: 'Integration Examples', link: '/examples#integration-examples' },
+          { text: 'Advanced Use Cases', link: '/examples#advanced-use-cases' },
+          { text: 'Sample Outputs', link: '/examples#sample-outputs' },
+          { text: 'Common Patterns', link: '/examples#common-patterns' }
         ]
       },
       {
