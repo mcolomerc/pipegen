@@ -59,8 +59,8 @@ my-pipeline/
 │   ├── cloud.yaml         # Cloud environment config
 │   └── flink-conf.yaml    # Flink configuration
 ├── schemas/
-│   ├── input.json         # Input AVRO schema
-│   └── output.json        # Output AVRO schema
+│   ├── input.avsc         # Canonical input AVRO schema
+│   └── output_result.avsc # AI path output AVRO schema
 └── sql/
     ├── 01_create_source_table.sql
     ├── 02_create_processing.sql
