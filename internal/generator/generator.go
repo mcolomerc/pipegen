@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"pipegen/internal/pipeline"
 	"pipegen/internal/templates"
 )
 
@@ -36,11 +37,12 @@ func sanitizeAVROIdentifier(s string) string {
 
 // ProjectGenerator handles the creation of new streaming pipeline projects
 type ProjectGenerator struct {
-	ProjectName     string
-	ProjectPath     string
-	LocalMode       bool
-	InputSchemaPath string
-	templateManager *templates.Manager
+	ProjectName        string
+	ProjectPath        string
+	LocalMode          bool
+	InputSchemaPath    string
+	InputSchemaContent string
+	templateManager    *templates.Manager
 }
 
 // NewProjectGenerator creates a new project generator instance
@@ -63,6 +65,11 @@ func (g *ProjectGenerator) SetInputSchemaPath(path string) {
 	g.InputSchemaPath = path
 }
 
+// SetInputSchemaContent sets the raw AVRO schema JSON content to be written as input schema
+func (g *ProjectGenerator) SetInputSchemaContent(content string) {
+	g.InputSchemaContent = content
+}
+
 // Generate creates the complete project structure
 func (g *ProjectGenerator) Generate() error {
 	// Create project directory
@@ -77,6 +84,14 @@ func (g *ProjectGenerator) Generate() error {
 
 	if err := g.generateAVROSchemas(); err != nil {
 		return err
+	}
+
+	// If an input schema is provided (path or content), generate a baseline source table DDL from it
+	if g.InputSchemaPath != "" || strings.TrimSpace(g.InputSchemaContent) != "" {
+		if err := g.generateSourceTableFromSchema(); err != nil {
+			// Don't fail the whole generation on DDL synthesis issues; warn instead
+			fmt.Printf("⚠️  Failed to generate source table from schema: %v\n", err)
+		}
 	}
 
 	if err := g.generateConfig(); err != nil {
@@ -124,12 +139,17 @@ func (g *ProjectGenerator) generateAVROSchemas() error {
 	}
 
 	// Handle input schema
-	if g.InputSchemaPath != "" {
+	switch {
+	case strings.TrimSpace(g.InputSchemaContent) != "":
+		if err := g.writeInputSchemaContent(schemasDir, g.InputSchemaContent); err != nil {
+			return err
+		}
+	case g.InputSchemaPath != "":
 		// Copy user-provided schema
 		if err := g.copyInputSchema(schemasDir); err != nil {
 			return err
 		}
-	} else {
+	default:
 		// Generate default input schema
 		if err := g.generateDefaultInputSchema(schemasDir); err != nil {
 			return err
@@ -150,8 +170,8 @@ func (g *ProjectGenerator) copyInputSchema(schemasDir string) error {
 	}
 	defer func() { _ = inputFile.Close() }()
 
-	// Copy to input_event.avsc
-	outputPath := filepath.Join(schemasDir, "input_event.avsc")
+	// Copy to input.avsc for consistency
+	outputPath := filepath.Join(schemasDir, "input.avsc")
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create input schema file: %w", err)
@@ -164,6 +184,16 @@ func (g *ProjectGenerator) copyInputSchema(schemasDir string) error {
 	}
 
 	fmt.Printf("📋 Using provided input schema: %s\n", g.InputSchemaPath)
+	return nil
+}
+
+// writeInputSchemaContent writes raw schema JSON content to schemas/input.avsc
+func (g *ProjectGenerator) writeInputSchemaContent(schemasDir string, content string) error {
+	outputPath := filepath.Join(schemasDir, "input.avsc")
+	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write input schema content: %w", err)
+	}
+	fmt.Printf("📋 Wrote provided input schema content to %s\n", outputPath)
 	return nil
 }
 
@@ -183,6 +213,134 @@ func (g *ProjectGenerator) generateDefaultInputSchema(schemasDir string) error {
 
 	inputSchemaPath := filepath.Join(schemasDir, "input.avsc")
 	return writeFile(inputSchemaPath, inputSchema)
+}
+
+// generateSourceTableFromSchema synthesizes a baseline Flink SQL source table from the input AVRO schema
+func (g *ProjectGenerator) generateSourceTableFromSchema() error {
+	// Load schemas from project dir to reuse existing loader and flexible keying
+	loader := pipeline.NewSchemaLoader(g.ProjectPath)
+	schemas, err := loader.LoadSchemas()
+	if err != nil {
+		return fmt.Errorf("failed to load schemas: %w", err)
+	}
+
+	// Prefer the schema keyed as "input"; otherwise take any
+	var schema *pipeline.Schema
+	if s, ok := schemas["input"]; ok {
+		schema = s
+	} else {
+		for _, s := range schemas {
+			schema = s
+			break
+		}
+	}
+	if schema == nil {
+		return fmt.Errorf("no input schema found to generate source table")
+	}
+
+	// Build columns DDL
+	var cols []string
+	for _, f := range schema.Fields {
+		colType := g.flinkTypeFromAvroType(f.Type)
+		// Quote column names with backticks
+		cols = append(cols, fmt.Sprintf("  `%s` %s", f.Name, colType))
+	}
+
+	// Derive table and topic names from project
+	sanitized := sanitizeAVROIdentifier(g.ProjectName)
+	tableName := fmt.Sprintf("%s_input", strings.ToLower(sanitized))
+	topicName := fmt.Sprintf("%s-input", strings.ToLower(sanitized))
+
+	ddl := fmt.Sprintf(`-- Auto-generated from AVRO schema
+CREATE TABLE %s (
+%s
+) WITH (
+  'connector' = 'kafka',
+  'topic' = '%s',
+  'properties.bootstrap.servers' = 'broker:29092',
+  'scan.startup.mode' = 'earliest-offset',
+  'format' = 'avro-confluent',
+  'avro-confluent.url' = 'http://schema-registry:8082'
+);
+`, tableName, strings.Join(cols, ",\n"), topicName)
+
+	// Write to sql/01_create_source_table.sql (override existing template)
+	sqlDir := filepath.Join(g.ProjectPath, "sql")
+	if err := os.MkdirAll(sqlDir, 0755); err != nil {
+		return fmt.Errorf("failed to ensure sql dir: %w", err)
+	}
+	target := filepath.Join(sqlDir, "01_create_source_table.sql")
+	if err := os.WriteFile(target, []byte(ddl), 0644); err != nil {
+		return fmt.Errorf("failed to write source table DDL: %w", err)
+	}
+
+	fmt.Printf("🧩 Generated source table DDL at %s\n", target)
+	return nil
+}
+
+// flinkTypeFromAvroType maps AVRO field types to Flink SQL types (best-effort)
+func (g *ProjectGenerator) flinkTypeFromAvroType(t interface{}) string {
+	switch v := t.(type) {
+	case string:
+		switch v {
+		case "string":
+			return "STRING"
+		case "int":
+			return "INT"
+		case "long":
+			return "BIGINT"
+		case "float":
+			return "FLOAT"
+		case "double":
+			return "DOUBLE"
+		case "boolean":
+			return "BOOLEAN"
+		case "bytes":
+			return "BYTES"
+		default:
+			return "STRING"
+		}
+	case []interface{}:
+		// Union types: pick first non-null
+		for _, u := range v {
+			if s, ok := u.(string); ok && s != "null" {
+				return g.flinkTypeFromAvroType(s)
+			}
+			if m, ok := u.(map[string]interface{}); ok {
+				return g.flinkTypeFromAvroType(m)
+			}
+		}
+		return "STRING"
+	case map[string]interface{}:
+		// Handle logical types and complex types
+		if lt, ok := v["logicalType"].(string); ok {
+			switch lt {
+			case "date":
+				return "DATE"
+			case "timestamp-millis", "timestamp-micros":
+				return "TIMESTAMP(3)"
+			case "time-millis", "time-micros":
+				return "TIME(3)"
+			}
+		}
+		if typ, ok := v["type"].(string); ok {
+			switch typ {
+			case "record":
+				return "STRING"
+			case "array":
+				return "ARRAY<STRING>"
+			case "map":
+				return "MAP<STRING, STRING>"
+			case "enum":
+				return "STRING"
+			default:
+				return g.flinkTypeFromAvroType(typ)
+			}
+		}
+		return "STRING"
+	default:
+		return "STRING"
+	}
 }
 
 func (g *ProjectGenerator) getSQLTemplates() map[string]string {

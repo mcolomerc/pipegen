@@ -95,21 +95,27 @@ func (g *LLMProjectGenerator) generateLLMSchemas() error {
 		return fmt.Errorf("error checking schemas directory %s: %w", schemasDir, err)
 	}
 
+	// Determine which input schema to write: prefer explicit InputSchemaContent when set
+	inputSchemaContent := g.llmContent.InputSchema
+	if strings.TrimSpace(g.InputSchemaContent) != "" {
+		inputSchemaContent = g.InputSchemaContent
+	}
+
 	// Check schema content before proceeding
-	if strings.TrimSpace(g.llmContent.InputSchema) == "" {
+	if strings.TrimSpace(inputSchemaContent) == "" {
 		return fmt.Errorf("input schema content is empty - cannot generate schema file")
 	}
 	if strings.TrimSpace(g.llmContent.OutputSchema) == "" {
 		return fmt.Errorf("output schema content is empty - cannot generate schema file")
 	}
 
-	// Write input schema from LLM
-	inputPath := filepath.Join(schemasDir, "input_event.avsc")
-	if err := g.writeLLMSchema(inputPath, g.llmContent.InputSchema); err != nil {
+	// Write input schema from LLM (standardized to input.avsc)
+	inputPath := filepath.Join(schemasDir, "input.avsc")
+	if err := g.writeLLMSchema(inputPath, inputSchemaContent); err != nil {
 		return fmt.Errorf("failed to write LLM input schema: %w", err)
 	}
 
-	// Write output schema from LLM
+	// Write output schema from LLM (keep existing naming to avoid breaking downstream)
 	outputPath := filepath.Join(schemasDir, "output_result.avsc")
 	if err := g.writeLLMSchema(outputPath, g.llmContent.OutputSchema); err != nil {
 		return fmt.Errorf("failed to write LLM output schema: %w", err)

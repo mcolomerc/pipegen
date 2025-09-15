@@ -82,7 +82,7 @@ All validations completed successfully!
 
 ⚠️  Schema validation warnings
   - Schema compatibility issue in input.avsc
-  - Deprecated field usage in output.avsc
+  - Deprecated field usage in output_result.avsc
 
 ❌ SQL validation failed
   - Syntax error in 01_create_source_table.sql:15

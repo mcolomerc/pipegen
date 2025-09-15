@@ -25,8 +25,8 @@ my-pipeline/
 ├── docker-compose.yml          # Local development stack
 ├── .pipegen.yaml              # Pipeline configuration
 ├── schemas/
-│   ├── input.avsc             # Input data schema
-│   └── output.avsc            # Output data schema
+│   ├── input.avsc             # Input data schema (canonical)
+│   └── output_result.avsc     # Output data schema (AI path)
 ├── sql/
 │   ├── 01_create_source_table.sql
 │   ├── 02_create_output_table.sql
@@ -68,13 +68,8 @@ pipegen init trading-analysis \
 
 ### Custom Schema Input
 ```bash
-# Use existing schema
-pipegen init my-pipeline --input-schema ./existing-schema.avsc
-
-# Multiple schema files
-pipegen init my-pipeline \
-  --input-schema ./user-events.avsc \
-  --output-schema ./processed-events.avsc
+# Use existing input schema
+pipegen init my-pipeline --input-schema ./existing-input.avsc
 ```
 
 ### Template Selection
@@ -98,8 +93,8 @@ pipegen init join-pipeline --template stream-join
 
 ### Schema Management
 - **`schemas/`** - AVRO schema definitions
-- **`input.avsc`** - Source data structure
-- **`output.avsc`** - Processed data structure
+- **`input.avsc`** - Source data structure (canonical)
+- **`output_result.avsc`** - AI-generated processed data structure (AI path)
 
 ### SQL Processing Logic
 - **`sql/`** - FlinkSQL files in execution order

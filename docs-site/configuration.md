@@ -131,8 +131,8 @@ flink:
 
 ```yaml
 schemas:
-  input: "schemas/input.avsc"           # Input schema file
-  output: "schemas/output.avsc"         # Output schema file
+  input: "schemas/input.avsc"                  # Input schema file (canonical)
+  output: "schemas/output_result.avsc"         # Output schema file (AI path)
   format: "avro"                        # Schema format (avro, json)
   
   # Schema evolution settings
