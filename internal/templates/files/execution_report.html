@@ -1315,8 +1315,13 @@
                             <th>Topic Name</th>
                             <th>Type</th>
                             <th>Partitions</th>
+                            <th>Replication</th>
                             <th>Schema</th>
                             <th>Messages</th>
+                            <th>Size</th>
+                            <th>Produce Rate</th>
+                            <th>Consume Rate</th>
+                            <th>Lag</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1325,8 +1330,13 @@
                             <td><strong>{{.Name}}</strong></td>
                             <td>{{.Type}}</td>
                             <td>{{.Partitions}}</td>
+                            <td>{{.ReplicationFactor}}</td>
                             <td>{{.Schema}}</td>
                             <td>{{.MessageCount}}</td>
+                            <td>{{.Size}}</td>
+                            <td>{{printf "%.2f" .ProduceRate}} msgs/sec</td>
+                            <td>{{printf "%.2f" .ConsumeRate}} msgs/sec</td>
+                            <td>{{.Lag}}</td>
                         </tr>
                         {{end}}
                     </tbody>
