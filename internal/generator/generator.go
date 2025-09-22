@@ -87,11 +87,13 @@ func (g *ProjectGenerator) Generate() error {
 	}
 
 	// Generate all components
-	if err := g.generateSQLStatements(); err != nil {
+	// Generate schemas first (especially important for CSV mode where schema inference happens)
+	if err := g.generateAVROSchemas(); err != nil {
 		return err
 	}
 
-	if err := g.generateAVROSchemas(); err != nil {
+	// Then generate SQL statements (CSV source table generation depends on inferred schema)
+	if err := g.generateSQLStatements(); err != nil {
 		return err
 	}
 
