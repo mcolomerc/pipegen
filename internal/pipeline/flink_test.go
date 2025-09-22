@@ -3,6 +3,9 @@ package pipeline
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -159,4 +162,76 @@ func TestDeploymentStatusTags(t *testing.T) {
 	assert.Equal(t, "RUNNING", status.Status)
 	assert.Equal(t, "RUNNING", status.Phase)
 	assert.Equal(t, "err", status.Error)
+}
+
+// Test fetchOperationResult helper (primary endpoint, fallback, transient success, and failure)
+func TestFlinkDeployer_FetchOperationResult(t *testing.T) {
+	deployer := NewFlinkDeployer(&Config{})
+	deployer.sessionID = "sess1"
+	operationHandle := "op123"
+
+	t.Run("primary endpoint success", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/sessions/sess1/operations/op123/result/0" {
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte(`{"results":"primary"}`))
+				return
+			}
+			w.WriteHeader(404)
+		}))
+		defer srv.Close()
+		body, err := deployer.fetchOperationResult(context.Background(), srv.URL, operationHandle)
+		assert.NoError(t, err)
+		assert.Contains(t, body, "primary")
+	})
+
+	t.Run("fallback endpoint success after 404 primary", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/v1/sessions/sess1/operations/op123/result/0":
+				w.WriteHeader(404)
+			case "/v1/sessions/sess1/operations/op123/result":
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte(`{"results":"legacy"}`))
+			default:
+				w.WriteHeader(404)
+			}
+		}))
+		defer srv.Close()
+		body, err := deployer.fetchOperationResult(context.Background(), srv.URL, operationHandle)
+		assert.NoError(t, err)
+		assert.Contains(t, body, "legacy")
+	})
+
+	t.Run("transient primary 404 then success", func(t *testing.T) {
+		var hits int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/sessions/sess1/operations/op123/result/0" {
+				count := atomic.AddInt32(&hits, 1)
+				if count == 1 { // first attempt 404
+					w.WriteHeader(404)
+					return
+				}
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte(`{"results":"eventual"}`))
+				return
+			}
+			w.WriteHeader(404)
+		}))
+		defer srv.Close()
+		body, err := deployer.fetchOperationResult(context.Background(), srv.URL, operationHandle)
+		assert.NoError(t, err)
+		assert.Contains(t, body, "eventual")
+		// ensure at least 2 hits on primary
+		assert.GreaterOrEqual(t, atomic.LoadInt32(&hits), int32(2))
+	})
+
+	t.Run("all endpoints fail", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(404)
+		}))
+		defer srv.Close()
+		_, err := deployer.fetchOperationResult(context.Background(), srv.URL, operationHandle)
+		assert.Error(t, err)
+	})
 }

@@ -371,16 +371,11 @@ func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) 
 			return name, nil
 		}
 		if opStatus == "ERROR" || opError != "" {
-			// Try to get detailed error from result endpoint
-			resultEndpoint := fmt.Sprintf("%s/v1/sessions/%s/operations/%s/result", sqlGatewayURL, fd.sessionID, operationHandle)
-			resultReq, _ := http.NewRequestWithContext(ctx, "GET", resultEndpoint, nil)
-			resultResp, err := http.DefaultClient.Do(resultReq)
-			if err == nil {
-				resultBody, _ := io.ReadAll(resultResp.Body)
-				if err := resultResp.Body.Close(); err != nil {
-					fmt.Printf("failed to close result response body: %v\n", err)
-				}
-				fmt.Printf("⚠️  Error details from result endpoint: %s\n", string(resultBody))
+			// Attempt to retrieve detailed error via helper (handles /result/0 fallback)
+			if details, derr := fd.fetchOperationResult(ctx, sqlGatewayURL, operationHandle); derr == nil && details != "" {
+				fmt.Printf("⚠️  Error details from result endpoint: %s\n", details)
+			} else if derr != nil {
+				fmt.Printf("⚠️  Result detail retrieval failed: %v\n", derr)
 			}
 			fmt.Printf("⚠️  ERROR deploying statement '%s': %s\n", name, opError)
 			return "", fmt.Errorf("SQL statement '%s' failed: %s", name, opError)
@@ -431,6 +426,60 @@ func extractOperationError(resp string) string {
 		return ""
 	}
 	return resp[start : start+end]
+}
+
+// fetchOperationResult attempts to retrieve the operation result (for error details)
+// It first tries the 0-based result endpoint introduced in newer Flink Gateway APIs:
+//
+//	/v1/sessions/{session}/operations/{op}/result/0
+//
+// Falls back to legacy endpoint without the trailing /0 if the first returns 404.
+// Performs a couple of quick retries in case the result materializes slightly after ERROR status.
+func (fd *FlinkDeployer) fetchOperationResult(ctx context.Context, baseURL, operationHandle string) (string, error) {
+	if fd.sessionID == "" {
+		return "", fmt.Errorf("sessionID not set for operation result fetch")
+	}
+	primary := fmt.Sprintf("%s/v1/sessions/%s/operations/%s/result/0", baseURL, fd.sessionID, operationHandle)
+	legacy := fmt.Sprintf("%s/v1/sessions/%s/operations/%s/result", baseURL, fd.sessionID, operationHandle)
+
+	endpoints := []string{primary, legacy}
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ { // 4 attempts total (approx <=2s)
+		for idx, ep := range endpoints {
+			req, err := http.NewRequestWithContext(ctx, "GET", ep, nil)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			body, rerr := io.ReadAll(resp.Body)
+			if cerr := resp.Body.Close(); cerr != nil {
+				fmt.Printf("failed to close result body: %v\n", cerr)
+			}
+			if rerr != nil {
+				lastErr = rerr
+				continue
+			}
+			if resp.StatusCode == 200 {
+				return string(body), nil
+			}
+			// If first endpoint (primary) returned 404, try legacy within same attempt; others break
+			if resp.StatusCode == 404 && idx == 0 {
+				continue
+			}
+			lastErr = fmt.Errorf("result endpoint %s returned %d", ep, resp.StatusCode)
+		}
+		// brief sleep before next attempt
+		time.Sleep(500 * time.Millisecond)
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("no result body available")
 }
 
 // extractSessionID parses the session id from the session creation response
