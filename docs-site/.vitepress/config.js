@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'PipeGen',
-  description: 'A powerful CLI tool for creating and managing streaming data pipelines • v1.4.1',
+  description: 'A powerful CLI tool for creating and managing streaming data pipelines • v1.4.2',
   base: '/pipegen/',
   
   head: [

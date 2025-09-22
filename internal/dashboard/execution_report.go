@@ -6,9 +6,11 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"pipegen/internal/pipeline"
+	itemplates "pipegen/internal/templates"
 )
 
 // ExecutionReportGenerator generates HTML execution reports
@@ -48,7 +50,9 @@ type ExecutionReportData struct {
 	Summary         ExecutionReportSummary `json:"summary"`
 	Charts          ChartData              `json:"charts"`
 	Status          string                 `json:"status"`
+	StatusClass     string                 `json:"status_class"`
 	Duration        time.Duration          `json:"duration"`
+	ExecutionTime   string                 `json:"execution_time"`
 	PipelineName    string                 `json:"pipeline_name"`
 	PipelineVersion string                 `json:"pipeline_version"`
 	LogoBase64      string                 `json:"logo_base64"`
@@ -100,8 +104,15 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	fmt.Printf("[Report] Loading template: %s\n", g.templatePath)
 	tmplContent, err := os.ReadFile(g.templatePath)
 	if err != nil {
-		fmt.Printf("[Report] ERROR: failed to read template file: %v\n", err)
-		return "", fmt.Errorf("failed to read template file: %w", err)
+		// Only fallback to embedded template if this is the default internal template path
+		defaultPath := filepath.Join("internal", "templates", "files", "execution_report.html")
+		if (g.templatePath == defaultPath || strings.HasSuffix(g.templatePath, "/internal/templates/files/execution_report.html")) && itemplates.ExecutionReportTemplate != "" {
+			fmt.Printf("[Report] WARN: failed to read default template from disk (%v); using embedded template fallback\n", err)
+			tmplContent = []byte(itemplates.ExecutionReportTemplate)
+		} else {
+			fmt.Printf("[Report] ERROR: failed to read template file: %v\n", err)
+			return "", fmt.Errorf("failed to read template file: %w", err)
+		}
 	}
 
 	fmt.Printf("[Report] Parsing template\n")
@@ -112,6 +123,25 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	}
 
 	data.LogoBase64 = g.logoBase64
+
+	// Derive CSS status class if not already provided
+	if data.StatusClass == "" {
+		switch strings.ToLower(data.Status) {
+		case "completed", "success", "succeeded":
+			data.StatusClass = "status-success"
+		case "failed", "error", "errored":
+			data.StatusClass = "status-error"
+		case "running", "in_progress", "in-progress", "active":
+			data.StatusClass = "status-running"
+		default:
+			data.StatusClass = "status-info"
+		}
+	}
+
+	// Populate ExecutionTime string if empty
+	if data.ExecutionTime == "" && data.Duration > 0 {
+		data.ExecutionTime = data.Duration.String()
+	}
 
 	timestamp := time.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("pipegen-execution-report-%s.html", timestamp)

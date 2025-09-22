@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	templates "pipegen/internal/templates"
 )
 
 // KafkaConfig holds Kafka topic creation settings
@@ -527,21 +529,22 @@ func (r *Runner) generateEnhancedHTMLReport(reportData map[string]interface{}, s
 	topicInfo := r.collectTopicInformation(resources)
 	schemaInfo := r.collectSchemaRegistryInformation(resources, schemas)
 
-	// Read template from file - use path relative to executable location
-	// First try: executable directory (for when running from bin/)
-	templatePath := filepath.Join(execDir, "..", "internal", "templates", "files", "execution_report.html")
-
-	// If that doesn't exist, try relative to current working directory (for development)
-	if _, err = os.Stat(templatePath); os.IsNotExist(err) {
-		templatePath = filepath.Join("internal", "templates", "files", "execution_report.html")
+	// Attempt to use embedded template first
+	templateStr := ""
+	if templates.ExecutionReportTemplate != "" {
+		templateStr = templates.ExecutionReportTemplate
+	} else {
+		// Fallback to filesystem paths for development environments
+		templatePath := filepath.Join(execDir, "..", "internal", "templates", "files", "execution_report.html")
+		if _, err = os.Stat(templatePath); os.IsNotExist(err) {
+			templatePath = filepath.Join("internal", "templates", "files", "execution_report.html")
+		}
+		content, readErr := os.ReadFile(templatePath)
+		if readErr != nil {
+			return fmt.Sprintf("<html><body><h1>Error reading template: %v</h1></body></html>", readErr)
+		}
+		templateStr = string(content)
 	}
-
-	var templateContent []byte
-	templateContent, err = os.ReadFile(templatePath)
-	if err != nil {
-		return fmt.Sprintf("<html><body><h1>Error reading template: %v</h1></body></html>", err)
-	}
-	templateStr := string(templateContent)
 
 	// Get actual metrics from producer and consumer
 	var messagesProduced int64

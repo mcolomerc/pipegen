@@ -12,6 +12,18 @@ All notable changes to PipeGen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2025-09-22
+
+### Fixed
+- **Execution Report Generation**: Embedded `execution_report.html` template directly into the binary to eliminate runtime failures when the template file isn't present beside the installed executable (observed in 1.4.1 release). The system now uses the embedded template first and falls back to disk only for development overrides.
+
+### Internal
+- Added `internal/templates/embed.go` with `//go:embed` directive.
+- Updated both `ExecutionReportGenerator` and pipeline runner HTML generation to support embedded fallback.
+
+### Verification
+- All unit tests pass; report generation paths exercised locally with and without on-disk template.
+
 ## [1.4.1] - 2025-09-22
 
 ### Fixed
