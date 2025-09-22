@@ -1251,9 +1251,9 @@
                         </tr>
                         <tr>
                             <td class="metric-label">Producer Rate</td>
-                            <td class="metric-value">{{printf "%.2f" .ThroughputProducer}} msg/sec</td>
+                            <td class="metric-value">{{printf "%.2f" .ThroughputProducer}} msgs/sec</td>
                             <td class="metric-label">Consumer Rate</td>
-                            <td class="metric-value">{{printf "%.2f" .ThroughputConsumer}} msg/sec</td>
+                            <td class="metric-value">{{printf "%.2f" .ThroughputConsumer}} msgs/sec</td>
                         </tr>
                         <tr>
                             <td class="metric-label">Success Rate</td>
@@ -1279,18 +1279,26 @@
                     <thead>
                         <tr>
                             <th>Job Name</th>
+                            <th>Job ID</th>
                             <th>Status</th>
                             <th>Duration</th>
+                            <th>Parallelism</th>
                             <th>Records Processed</th>
+                            <th>Records/sec</th>
+                            <th>Backpressure</th>
                         </tr>
                     </thead>
                     <tbody>
                         {{range .FlinkJobs}}
                         <tr>
                             <td><strong><a href="{{$.FlinkURL}}/#/job/{{.JobID}}/overview" target="_blank">{{.Name}}</a></strong></td>
+                            <td>{{.JobID}}</td>
                             <td>{{.Status}}</td>
                             <td>{{.Duration}}</td>
+                            <td>{{.Parallelism}}</td>
                             <td>{{.RecordsProcessed}}</td>
+                            <td>{{printf "%.2f" .RecordsPerSec}}</td>
+                            <td>{{.BackPressureStatus}}</td>
                         </tr>
                         {{end}}
                     </tbody>
@@ -1307,8 +1315,13 @@
                             <th>Topic Name</th>
                             <th>Type</th>
                             <th>Partitions</th>
+                            <th>Replication</th>
                             <th>Schema</th>
                             <th>Messages</th>
+                            <th>Size</th>
+                            <th>Produce Rate</th>
+                            <th>Consume Rate</th>
+                            <th>Lag</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1317,8 +1330,13 @@
                             <td><strong>{{.Name}}</strong></td>
                             <td>{{.Type}}</td>
                             <td>{{.Partitions}}</td>
+                            <td>{{.ReplicationFactor}}</td>
                             <td>{{.Schema}}</td>
                             <td>{{.MessageCount}}</td>
+                            <td>{{.Size}}</td>
+                            <td>{{printf "%.2f" .ProduceRate}} msgs/sec</td>
+                            <td>{{printf "%.2f" .ConsumeRate}} msgs/sec</td>
+                            <td>{{.Lag}}</td>
                         </tr>
                         {{end}}
                     </tbody>
@@ -1333,10 +1351,12 @@
                         <tr>
                             <th>Subject</th>
                             <th>Schema ID</th>
-                            <th>Version</th>
+                            <th>Messages</th>
                             <th>Type</th>
                             <th>Status</th>
-                        </tr>
+                            <th>Produce Rate</th>
+                            <th>Consume Rate</th>
+                            <th>Lag</th>
                     </thead>
                     <tbody>
                         {{range .SchemaInfo}}
@@ -1346,7 +1366,10 @@
                             <td>{{.Version}}</td>
                             <td>{{.Type}}</td>
                             <td>{{.Status}}</td>
-                        </tr>
+                            <td>{{.MessageCount}}</td>
+                            <td>{{printf "%.2f" .ProduceRate}} msgs/sec</td>
+                            <td>{{printf "%.2f" .ConsumeRate}} msgs/sec</td>
+                            <td>{{.Lag}}</td>
                         {{end}}
                     </tbody>
                 </table>
@@ -1358,7 +1381,7 @@
                 <table class="config-table">
                     <tr>
                         <td class="config-label">Message Rate</td>
-                        <td class="config-value">{{.MessageRate}} msg/sec</td>
+                        <td class="config-value">{{.MessageRate}} msgs/sec</td>
                     </tr>
                     <tr>
                         <td class="config-label">Duration</td>
