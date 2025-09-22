@@ -12,6 +12,22 @@ All notable changes to PipeGen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2025-09-22
+
+### Fixed
+- **Flink SQL Deployment Robustness**: Added dual-endpoint fallback for operation result retrieval. The deployer now first queries `.../result/0` (modern SQL Gateway) and transparently falls back to legacy `.../result` if a 404 is returned.
+- Improved retry logic with clear context-rich error messages when all attempts fail (includes endpoint paths tried and HTTP status codes).
+
+### Added
+- **Unit Tests**: Comprehensive tests for the new `fetchOperationResult` helper covering primary success, fallback success, transient 404 recovery, and full failure scenarios.
+
+### Internal
+- Refactored result polling into a dedicated helper to simplify `deployStatement` logic and improve maintainability.
+
+### Verification
+- All tests pass (`go test ./...`), including new Flink deployer tests.
+- No public API changes; patch release is backward compatible.
+
 ## [1.2.0] - 2025-09-04
 
 ## [1.4.0] - 2025-09-22
