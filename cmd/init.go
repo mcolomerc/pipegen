@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"pipegen/internal/generator"
@@ -36,6 +37,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	initCmd.Flags().Bool("force", false, "Overwrite existing project directory")
 	initCmd.Flags().String("input-schema", "", "Path to existing AVRO schema file to use as input schema")
+	initCmd.Flags().String("input-csv", "", "Path to CSV file to use as source dataset (generates filesystem CSV source table)")
 	initCmd.Flags().String("describe", "", "Natural language description of your streaming pipeline (requires PIPEGEN_OLLAMA_MODEL or PIPEGEN_OPENAI_API_KEY)")
 	initCmd.Flags().String("domain", "", "Business domain for better AI context (e.g., ecommerce, fintech, iot)")
 }
@@ -57,6 +59,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Allow combining --input-schema with --describe (Issue #8)
 	// If both provided, we'll ground AI with the provided schema content
 
+	csvPath, _ := cmd.Flags().GetString("input-csv")
 	// Validate input schema file if provided
 	if inputSchemaPath != "" {
 		if _, err := os.Stat(inputSchemaPath); os.IsNotExist(err) {
@@ -73,6 +76,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	llmService := llm.NewLLMService()
 
 	// Handle AI-powered generation
+
+	// Validate CSV file if provided
+	if csvPath != "" {
+		if _, err := os.Stat(csvPath); os.IsNotExist(err) {
+			return fmt.Errorf("input CSV file not found: %s", csvPath)
+		}
+		fmt.Printf("📄 Using provided input CSV: %s\n", csvPath)
+	}
 	if description != "" {
 		if !llmService.IsEnabled() {
 			// Fallback to minimal generation when AI is not available
@@ -89,6 +100,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 			}
 			if inputSchemaPath != "" {
 				gen.SetInputSchemaPath(inputSchemaPath)
+			}
+			if csvPath != "" {
+				gen.SetInputCSVPath(csvPath)
 			}
 
 			if err := gen.Generate(); err != nil {
@@ -109,13 +123,27 @@ func runInit(cmd *cobra.Command, args []string) error {
 			var generatedContent *llm.GeneratedContent
 			var err error
 
-			// If user provided an input schema, read it and ground the AI prompt with it
+			// Decide grounding strategy
 			if inputSchemaPath != "" {
+				// Provided schema takes precedence
 				schemaBytes, readErr := os.ReadFile(inputSchemaPath)
 				if readErr != nil {
 					return fmt.Errorf("failed to read input schema file: %w", readErr)
 				}
 				generatedContent, err = llmService.GeneratePipelineWithSchema(ctx, string(schemaBytes), description, domain)
+			} else if csvPath != "" {
+				// Perform lightweight analysis and use CSV-grounded prompt
+				an := generator.NewCSVAnalyzer(csvPath)
+				res, aErr := an.Analyze()
+				if aErr != nil {
+					return fmt.Errorf("CSV analysis failed: %w", aErr)
+				}
+				analysisSummary := generator.ExportAnalysisForPrompt(res, 25)
+				avroBytes, avErr := generator.GenerateAVROFromAnalysis(projectName, res)
+				if avErr != nil {
+					return fmt.Errorf("failed to generate AVRO from analysis: %w", avErr)
+				}
+				generatedContent, err = llmService.GeneratePipelineWithCSVAnalysis(ctx, description, domain, analysisSummary, string(avroBytes))
 			} else {
 				generatedContent, err = llmService.GeneratePipeline(ctx, description, domain)
 			}
@@ -153,6 +181,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 					llmGen.SetInputSchemaContent(string(b))
 				}
 			}
+			if csvPath != "" {
+				llmGen.SetInputCSVPath(csvPath) // (Will be implemented in generator)
+			}
 
 			// Print optimizations
 			if len(generatedContent.Optimizations) > 0 {
@@ -160,6 +191,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 				for _, opt := range generatedContent.Optimizations {
 					fmt.Printf("  • %s\n", opt)
 				}
+			}
+
+			// Provide CSV path (will trigger inference if no schema content overrides it)
+			if csvPath != "" && inputSchemaPath == "" && strings.TrimSpace(llmGen.InputSchemaContent) == "" {
+				llmGen.SetInputCSVPath(csvPath)
 			}
 
 			// Generate the project using LLM generator
@@ -181,6 +217,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 		if inputSchemaPath != "" {
 			gen.SetInputSchemaPath(inputSchemaPath)
+		}
+		if csvPath != "" {
+			gen.SetInputCSVPath(csvPath) // (Will be implemented in generator)
 		}
 
 		// Generate the project using standard generator

@@ -1,0 +1,4 @@
+id,name,active,score,created_at
+1,Alice,true,10.5,2024-12-31
+2,Bob,false,11.0,2025-01-01 12:30:00
+3,Charlie,true,,2025-01-02T08:15:10

@@ -72,6 +72,23 @@ pipegen init trading-analysis \
 pipegen init my-pipeline --input-schema ./existing-input.avsc
 ```
 
+### Infer Schema from CSV
+```bash
+# Analyze CSV, infer schema & generate filesystem source table
+pipegen init sessions --input-csv ./data/sessions.csv
+
+# Combine CSV inference with AI aggregation generation
+pipegen init session-aggregates \
+  --input-csv ./data/sessions.csv \
+  --describe "Daily active users, average session length, bounce rate" \
+  --domain ecommerce
+```
+
+CSV inference produces:
+- `schemas/input.avsc` (inferred types, nullability)
+- `sql/01_create_source_table.sql` with `filesystem` + `csv` connector
+- Column profile fed into AI prompt (when `--describe` used)
+
 ### Template Selection
 ```bash
 # Real-time analytics template
@@ -99,6 +116,7 @@ pipegen init join-pipeline --template stream-join
 ### SQL Processing Logic
 - **`sql/`** - FlinkSQL files in execution order
 - **`01_create_source_table.sql`** - Input table definition
+  - In CSV mode: generated with inferred columns and filesystem CSV connector
 - **`02_create_output_table.sql`** - Output table definition
 - **`03_processing_logic.sql`** - Data transformation logic
 

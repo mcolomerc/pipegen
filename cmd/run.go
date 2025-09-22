@@ -115,6 +115,16 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		},
 	}
 
+	// Detect CSV mode (filesystem connector CSV) by inspecting 01_create_source_table.sql if present
+	createSourcePath := filepath.Join(projectDir, "sql", "01_create_source_table.sql")
+	if b, err := os.ReadFile(createSourcePath); err == nil {
+		contentUpper := strings.ToUpper(string(b))
+		if strings.Contains(contentUpper, "'CONNECTOR' = 'FILESYSTEM'") && strings.Contains(contentUpper, "'FORMAT' = 'CSV'") {
+			config.CSVMode = true
+			fmt.Println("🧪 Detected filesystem CSV source table: enabling CSV mode (skip producer & consumer).")
+		}
+	}
+
 	// --- NEW LOGIC: Check if stack is running, deploy if needed ---
 	if !isDockerStackRunning(projectDir) {
 		fmt.Println("🧹 Docker stack not running. Deploying stack...")

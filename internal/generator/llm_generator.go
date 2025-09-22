@@ -25,6 +25,11 @@ type LLMProjectGenerator struct {
 	llmContent *LLMContent
 }
 
+// SetInputCSVPath proxies to base generator for fluent API compatibility
+func (g *LLMProjectGenerator) SetInputCSVPath(path string) {
+	g.ProjectGenerator.SetInputCSVPath(path)
+}
+
 // NewProjectGeneratorWithLLM creates a generator with LLM-generated content
 func NewProjectGeneratorWithLLM(projectName, projectPath string, localMode bool, content *LLMContent) (*LLMProjectGenerator, error) {
 	base, err := NewProjectGenerator(projectName, projectPath, localMode)

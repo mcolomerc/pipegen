@@ -5,6 +5,24 @@ All notable changes to PipeGen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **CSV Input Mode**: Initialize projects from a CSV file using `--input-csv` to infer schema, generate a filesystem Flink source table, and enrich AI prompts with real column profiling.
+- **CSV Analyzer**: Streaming, memory-safe profiling (types, nullability, sample values) powering schema inference & AI grounding.
+- **Run Auto-Detection**: `pipegen run` now detects filesystem CSV source tables (`connector=filesystem`, `format=csv`) and automatically skips only the Kafka producer while still starting the consumer.
+- **Documentation**: Updated `init`, `run`, `getting-started`, and `scaffolding` docs with CSV mode workflow and examples.
+
+### Changed
+- **CSV Mode Behavior**: Consumer is no longer skipped in CSV mode; only the producer is bypassed to keep downstream validation.
+
+### Internal
+- Added `CSVMode` flag to pipeline config; detection logic in `cmd/run.go`.
+- Refactored runner to branch only around producer startup while retaining consumer logic.
+
+### Pending
+- Additional examples page showcasing CSV-to-aggregation end-to-end.
+
 # Changelog
 
 All notable changes to PipeGen will be documented in this file.

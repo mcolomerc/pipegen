@@ -37,6 +37,9 @@ pipegen run --reports-dir ./execution-reports
 
 # Run with no cleanup (preserves execution state)
 pipegen run --cleanup=false
+
+# Run a CSV-backed pipeline (auto-detected; producer skipped, consumer runs)
+pipegen run --project-dir ./web-events
 ```
 
 ## Flags
@@ -54,6 +57,46 @@ pipegen run --cleanup=false
 - `--project-dir` - Project directory path (default: ".")
 - `--reports-dir` - Directory to save execution reports (default: "./reports")
 - `--help` - Show help for run command
+
+## CSV Mode (Filesystem Source)
+
+PipeGen supports pipelines whose source is a static or append-only CSV file via the Flink `filesystem` connector. When a project was initialized with `--input-csv`, the generated `sql/01_create_source_table.sql` contains:
+
+```
+'connector' = 'filesystem'
+'path' = '...your file...'
+'format' = 'csv'
+```
+
+The `run` command auto-detects this pattern and enables **CSV mode**:
+
+- Skips the Kafka producer (data originates from the CSV file)
+- Still starts the Kafka consumer to validate downstream topic output
+- Monitors Flink job metrics as usual
+- No extra flags required—detection is based on the source table definition
+
+### When to Use
+- Rapid prototyping with historical/batch data
+- Validating transformations before wiring live Kafka ingestion
+- Reproducing issues with a fixed dataset
+
+### Behavior Differences vs Kafka Mode
+| Aspect | Kafka Mode | CSV Mode |
+|--------|------------|----------|
+| Source | Live synthetic producer | Filesystem CSV connector |
+| Producer | Started (rate driven) | Skipped |
+| Consumer | Started | Started |
+| Expected Messages | Auto-derived from producer or flag | Must be supplied manually if you want bounded consumption (otherwise timeout logic applies) |
+| Data Volume | Controlled by duration * rate | CSV file size / row count |
+
+### Example
+```bash
+pipegen init web-events --input-csv ./data/web_events.csv
+pipegen deploy
+pipegen run --project-dir ./web-events
+```
+
+Optional: set `--expected-messages` to the approximate row count if you want early termination after full ingestion.
 
 ## Traffic Patterns
 

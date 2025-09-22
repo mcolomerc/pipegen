@@ -2,6 +2,8 @@ package generator
 
 import (
 	"bufio"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"pipegen/internal/pipeline"
@@ -42,6 +45,7 @@ type ProjectGenerator struct {
 	LocalMode          bool
 	InputSchemaPath    string
 	InputSchemaContent string
+	InputCSVPath       string
 	templateManager    *templates.Manager
 }
 
@@ -68,6 +72,11 @@ func (g *ProjectGenerator) SetInputSchemaPath(path string) {
 // SetInputSchemaContent sets the raw AVRO schema JSON content to be written as input schema
 func (g *ProjectGenerator) SetInputSchemaContent(content string) {
 	g.InputSchemaContent = content
+}
+
+// SetInputCSVPath sets the path to a user-provided CSV file for schema inference
+func (g *ProjectGenerator) SetInputCSVPath(path string) {
+	g.InputCSVPath = path
 }
 
 // Generate creates the complete project structure
@@ -129,6 +138,64 @@ func (g *ProjectGenerator) generateSQLStatements() error {
 		}
 	}
 
+	// If CSV path provided, synthesize a filesystem source table (override default 01_create_source_table.sql)
+	if g.InputCSVPath != "" {
+		if err := g.generateCSVSourceTable(sqlDir); err != nil {
+			fmt.Printf("⚠️  Failed to generate CSV source table: %v\n", err)
+		}
+	}
+
+	return nil
+}
+
+// generateCSVSourceTable creates a Flink filesystem connector table referencing the provided CSV file.
+func (g *ProjectGenerator) generateCSVSourceTable(sqlDir string) error {
+	// We rely on the previously generated (or inferred) input.avsc schema to build the column list.
+	loader := pipeline.NewSchemaLoader(g.ProjectPath)
+	schemas, err := loader.LoadSchemas()
+	if err != nil {
+		return fmt.Errorf("load schemas: %w", err)
+	}
+	inputSchema := schemas["input"]
+	if inputSchema == nil {
+		return fmt.Errorf("input schema not found for CSV source table generation")
+	}
+
+	var cols []string
+	for _, f := range inputSchema.Fields {
+		// Basic mapping (reuse existing flink type mapper indirectly via avro types we already have)
+		// We'll parse field.Type JSON representation; easier: call through existing helper by re-marshalling
+		avroType := f.Type
+		flinkType := g.flinkTypeFromAvroType(avroType)
+		cols = append(cols, fmt.Sprintf("  `%s` %s", f.Name, flinkType))
+	}
+
+	// Derive a stable table name
+	sanitized := sanitizeAVROIdentifier(g.ProjectName)
+	tableName := fmt.Sprintf("%s_input_csv", strings.ToLower(sanitized))
+
+	// Escape path (Flink expects a URI-like path; we write absolute path for clarity)
+	abs, err := filepath.Abs(g.InputCSVPath)
+	if err != nil {
+		abs = g.InputCSVPath
+	}
+
+	ddl := fmt.Sprintf(`-- Auto-generated CSV filesystem source table
+CREATE TABLE %s (
+%s
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '%s',
+  'format' = 'csv',
+  'csv.ignore-parse-errors' = 'true'
+);
+`, tableName, strings.Join(cols, ",\n"), abs)
+
+	filePath := filepath.Join(sqlDir, "01_create_source_table.sql")
+	if err := os.WriteFile(filePath, []byte(ddl), 0644); err != nil {
+		return fmt.Errorf("write csv source table: %w", err)
+	}
+	fmt.Printf("🧩 Generated CSV filesystem source table DDL at %s\n", filePath)
 	return nil
 }
 
@@ -148,6 +215,10 @@ func (g *ProjectGenerator) generateAVROSchemas() error {
 		// Copy user-provided schema
 		if err := g.copyInputSchema(schemasDir); err != nil {
 			return err
+		}
+	case g.InputCSVPath != "":
+		if err := g.generateSchemaFromCSV(schemasDir); err != nil {
+			return fmt.Errorf("failed to infer schema from CSV: %w", err)
 		}
 	default:
 		// Generate default input schema
@@ -213,6 +284,132 @@ func (g *ProjectGenerator) generateDefaultInputSchema(schemasDir string) error {
 
 	inputSchemaPath := filepath.Join(schemasDir, "input.avsc")
 	return writeFile(inputSchemaPath, inputSchema)
+}
+
+// generateSchemaFromCSV performs a lightweight streaming analysis of the CSV file to infer an AVRO schema.
+// This is intentionally conservative: it samples up to sampleLimit rows and infers primitive types only.
+func (g *ProjectGenerator) generateSchemaFromCSV(schemasDir string) error {
+	const sampleLimit = 500
+
+	f, err := os.Open(g.InputCSVPath)
+	if err != nil {
+		return fmt.Errorf("open CSV: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	r := csv.NewReader(f)
+	r.ReuseRecord = true
+	r.FieldsPerRecord = -1 // allow variable
+
+	// Read header
+	header, err := r.Read()
+	if err != nil {
+		return fmt.Errorf("read header: %w", err)
+	}
+	if len(header) == 0 {
+		return fmt.Errorf("empty CSV header")
+	}
+
+	colCount := len(header)
+	// State trackers
+	type colState struct {
+		name     string
+		isInt    bool
+		isFloat  bool
+		isBool   bool
+		nullable bool
+		sampled  int
+	}
+	cols := make([]*colState, colCount)
+	for i, h := range header {
+		name := strings.TrimSpace(h)
+		if name == "" {
+			name = fmt.Sprintf("col_%d", i+1)
+		}
+		// sanitize for Avro (reuse sanitizeAVROIdentifier but allow upper -> lower)
+		name = sanitizeAVROIdentifier(strings.ToLower(name))
+		cols[i] = &colState{name: name, isInt: true, isFloat: true, isBool: true}
+	}
+
+	for row := 0; row < sampleLimit; row++ {
+		rec, e := r.Read()
+		if e != nil {
+			if e == io.EOF {
+				break
+			}
+			// Any parse error: stop sampling early (best-effort inference)
+			break
+		}
+		if len(rec) == 0 {
+			break
+		}
+		for i := 0; i < colCount && i < len(rec); i++ {
+			v := strings.TrimSpace(rec[i])
+			if v == "" {
+				cols[i].nullable = true
+				continue
+			}
+			cols[i].sampled++
+			if cols[i].isInt {
+				if _, err := strconv.ParseInt(v, 10, 64); err != nil {
+					cols[i].isInt = false
+				}
+			}
+			if cols[i].isFloat {
+				if _, err := strconv.ParseFloat(v, 64); err != nil {
+					cols[i].isFloat = false
+				}
+			}
+			if cols[i].isBool {
+				lower := strings.ToLower(v)
+				if lower != "true" && lower != "false" && lower != "0" && lower != "1" {
+					cols[i].isBool = false
+				}
+			}
+		}
+	}
+
+	// Build AVRO schema
+	record := map[string]interface{}{
+		"type":      "record",
+		"name":      sanitizeAVROIdentifier(g.ProjectName) + "_input",
+		"namespace": "pipegen.generated",
+	}
+	var fields []map[string]interface{}
+	for _, c := range cols {
+		avroType := "string"
+		if c.isInt && c.sampled > 0 {
+			avroType = "int"
+		} else if c.isFloat && !c.isInt && c.sampled > 0 { // float only if not pure int
+			avroType = "double"
+		} else if c.isBool && c.sampled > 0 {
+			avroType = "boolean"
+		}
+		var fieldType interface{}
+		if c.nullable {
+			fieldType = []interface{}{"null", avroType}
+		} else {
+			fieldType = avroType
+		}
+		fields = append(fields, map[string]interface{}{
+			"name": c.name,
+			"type": fieldType,
+		})
+	}
+	record["fields"] = fields
+
+	jsonBytes, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal inferred schema: %w", err)
+	}
+
+	outputPath := filepath.Join(schemasDir, "input.avsc")
+	if err := os.WriteFile(outputPath, jsonBytes, 0644); err != nil {
+		return fmt.Errorf("write inferred schema: %w", err)
+	}
+
+	fmt.Printf("🧪 Inferred AVRO schema from CSV (%d columns) -> %s\n", len(cols), outputPath)
+	return nil
 }
 
 // generateSourceTableFromSchema synthesizes a baseline Flink SQL source table from the input AVRO schema

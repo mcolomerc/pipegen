@@ -47,6 +47,9 @@ pipegen init my-first-pipeline
 
 # Or use AI to generate from description
 pipegen init user-analytics --describe "Track user page views and calculate session duration analytics" --domain "ecommerce"
+
+# Initialize from a CSV file (schema inferred, filesystem source table)
+pipegen init web-events --input-csv ./data/web_events_sample.csv
 ```
 
 This creates a complete project structure:
@@ -95,6 +98,9 @@ pipegen run --duration 1m --message-rate 10
 
 # Smart consumer stopping (stops early when expected messages consumed)
 pipegen run --expected-messages 500 --message-rate 50
+
+# CSV-backed project (producer skipped automatically)
+pipegen run --project-dir ./web-events
 ```
 
 ### Step 4: Monitor & Analyze
