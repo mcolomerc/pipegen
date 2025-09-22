@@ -14,6 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.0] - 2025-09-04
 
+## [1.4.0] - 2025-09-22
+
+### Added
+- **Execution Report Enhancements**:
+  - Enriched Kafka Topics table (partitions, replication factor, total messages, size, produce / consume rate, lag)
+  - Enriched Flink Jobs table (job id, status badge, duration, parallelism, records in/out, throughput, backpressure)
+  - Performance metrics section formatting improvements with consistent card/table styling
+  - Pipeline footer timestamp now bound to execution metadata instead of live time call
+  - ASCII pipeline diagram updated with standardized units
+- **Unit Standardization**: All throughput / rate metrics now displayed as `msgs/sec` (previous inconsistency with `msg/sec`).
+
+### Fixed
+- Correct timestamp rendering in inline dashboard report template (uses `.LastUpdated` instead of `time.Now` inside template scope)
+- Ensured template functions consistently handle large number formatting (K / M suffix)
+
+### Internal
+- Refactored report generation logic to clearly separate inline dashboard report vs file-based execution report generator
+- Added extended topic/job metric fields to internal data structures
+
+### Verification
+- All existing tests green (`make test`), lint and formatting checks pass
+- Manual HTML report generation validated (Kafka & Flink sections render enriched tables)
+
 ## [1.3.0] - 2025-09-15
 
 ### Added
