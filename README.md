@@ -20,6 +20,9 @@ curl -sSL https://raw.githubusercontent.com/mcolomerc/pipegen/main/install.sh | 
 # Create an AI-generated fraud detection pipeline
 pipegen init fraud-detection --describe "Monitor payment transactions, detect suspicious patterns using machine learning, and alert on potential fraud within 30 seconds"
 
+# OR create from a CSV file with intelligent schema inference
+pipegen init analytics-pipeline --input-csv ./data/user_events.csv
+
 # Deploy local development stack
 pipegen deploy
 
@@ -30,7 +33,8 @@ pipegen run --message-rate 100 --duration 10m --traffic-pattern "2m-4m:400%,6m-8
 ## Features ([see docs](https://mcolomerc.github.io/pipegen/features.html))
 
 - 🚀 [Project scaffolding](https://mcolomerc.github.io/pipegen/features.html#project-scaffolding) - Generate complete project structure with SQL and AVRO schemas
-- 🐳 [Local development](https://mcolomerc.github.io/pipegen/features.html#local-development) - Docker Compose stack with Kafka, Flink, and Schema Registry
+- � **CSV Input Support** - Bootstrap pipelines from CSV files with intelligent schema inference and Docker integration
+- �🐳 [Local development](https://mcolomerc.github.io/pipegen/features.html#local-development) - Docker Compose stack with Kafka, Flink, and Schema Registry
 - 🤖 [AI-powered generation](https://mcolomerc.github.io/pipegen/ai-generation.html) - Describe your pipeline in natural language and let AI create optimized components
 - 📊 [Smart producer](https://mcolomerc.github.io/pipegen/features.html#smart-producer) - Generate realistic test data matching any schema structure
 - 👂 [Kafka consumer](https://mcolomerc.github.io/pipegen/features.html#kafka-consumer) - Validate pipeline output with built-in message validation
