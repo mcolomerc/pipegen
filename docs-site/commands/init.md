@@ -12,6 +12,7 @@ pipegen init <project-name> [flags]
 
 - `--force`           Overwrite existing project directory
 - `--input-schema`    Path to an AVRO schema (input.avsc) to seed the project
+- `--input-csv`       Path to a CSV file to infer schema & generate a filesystem source table
 - `--describe`        Natural language description for AI generation
 - `--domain`          Business domain for better AI context (e.g., ecommerce, fintech, iot)
 - `--help`            Show help
@@ -34,6 +35,15 @@ pipegen init analytics \
   --input-schema ./schemas/input.avsc \
   --describe "Hourly revenue per user with watermarking" \
   --domain ecommerce
+
+# Initialize from a CSV file (schema inferred, filesystem source created)
+pipegen init web-events --input-csv ./data/web_events_sample.csv
+
+# CSV + AI (AI grounded with inferred schema & profile of CSV columns)
+pipegen init session-metrics \
+  --input-csv ./data/sessions.csv \
+  --describe "Session duration, bounce rate, and active user aggregation" \
+  --domain ecommerce
 ```
 
 ## Behavior
@@ -47,6 +57,18 @@ pipegen init analytics \
   - If AI is not configured, PipeGen falls back automatically:
     - With `--input-schema`: schema-driven generation with baseline DDL
     - Without `--input-schema`: minimal project with default schema and templates
+  
+- With `--input-csv <file>` (CSV-driven generation)
+  - Streaming analyzer reads the CSV (memory-safe, incremental) and infers:
+    - Column names & order
+    - Data types (int, long, double, boolean, string, timestamp) with numeric vs categorical heuristics
+    - Nullability & value counts
+    - Sample values for prompt grounding
+  - Generates an inferred AVRO schema at `schemas/input.avsc`
+  - Creates a filesystem source table at `sql/01_create_source_table.sql` using the Flink `filesystem` connector + `csv` format
+  - Marks the project as CSV mode (auto-detected later by `pipegen run` – no extra flag needed)
+  - If `--describe` is also passed, AI prompt is enriched with a markdown analysis of each column (distribution, sample values) to produce higher-quality aggregations
+  - Output / aggregation SQL is generated the same way as schema-driven mode, but grounded in your real data profile
 
 ## Generated Files
 
@@ -57,6 +79,11 @@ When you run `pipegen init`, it creates:
   - `input.avsc` (canonical input schema)
   - `output_result.avsc` (AI path)
 - `sql/` - Flink SQL files (includes `01_create_source_table.sql` in schema-driven path)
+  - In CSV mode the source table uses:
+    - `'connector' = 'filesystem'`
+    - `'path' = '<your CSV path>'`
+    - `'format' = 'csv'`
+    - Proper column definitions inferred from the analyzer
 - `docker-compose.yml`, `flink-conf.yaml`, `flink-entrypoint.sh` (local stack)
 - `README.md` - Project documentation
 - `sql/OPTIMIZATIONS.md` - AI optimization suggestions (AI path)
@@ -76,5 +103,6 @@ If neither is set, `--describe` gracefully falls back as described above.
 2. Review generated `schemas/` and `sql/`
 3. Start the local stack: `pipegen deploy`
 4. Run the pipeline: `pipegen run`
+  - In CSV mode the run automatically skips the Kafka producer (filesystem source supplies data) while still starting the Kafka consumer to validate downstream output.
 
 See also: [AI Generation](../ai-generation.md), [Getting Started](../getting-started.md)

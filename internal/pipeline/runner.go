@@ -42,6 +42,7 @@ type Config struct {
 	TrafficPatterns   *TrafficPatterns // Traffic patterns for dynamic rate changes
 	KafkaConfig       KafkaConfig      // Kafka topic configuration
 	GlobalTables      bool             // New field to enable global table creation mode
+	CSVMode           bool             // When true, skip Kafka producer ONLY (filesystem CSV source table); consumer still runs
 }
 
 // Runner orchestrates the complete pipeline execution
@@ -306,34 +307,40 @@ func (r *Runner) Run(ctx context.Context) error {
 	fmt.Println("⏳ Waiting for Flink jobs to initialize and start processing...")
 	time.Sleep(3 * time.Second) // Give Flink jobs time to initialize
 
-	// Step 8: Start producer (runs for specified duration)
-	fmt.Println("📤 Starting Kafka producer...")
-	fmt.Printf("⏱️  Producer will run for %v at %d msg/sec\n", r.config.Duration, r.config.MessageRate)
+	if r.config.CSVMode {
+		fmt.Println("📄 CSV mode detected: skipping Kafka producer (filesystem source table assumed). Kafka consumer will still run.")
+		// Monitor Flink metrics early
+		go r.monitorFlinkMetrics(pipelineCtx, deploymentIDs)
+	} else {
+		// Step 8: Start producer (runs for specified duration)
+		fmt.Println("📤 Starting Kafka producer...")
+		fmt.Printf("⏱️  Producer will run for %v at %d msg/sec\n", r.config.Duration, r.config.MessageRate)
 
-	producerCtx, cancelProducer := context.WithTimeout(pipelineCtx, r.config.Duration)
-	defer cancelProducer()
+		producerCtx, cancelProducer := context.WithTimeout(pipelineCtx, r.config.Duration)
+		defer cancelProducer()
 
-	producerDone := make(chan error, 1)
-	go func() {
-		producerDone <- r.producer.Start(producerCtx, resources.InputTopic, schemas["input"])
-	}()
+		producerDone := make(chan error, 1)
+		go func() {
+			producerDone <- r.producer.Start(producerCtx, resources.InputTopic, schemas["input"])
+		}()
 
-	// Step 9: Monitor Flink job metrics during execution
-	go r.monitorFlinkMetrics(pipelineCtx, deploymentIDs)
+		// Step 9: Monitor Flink job metrics during execution
+		go r.monitorFlinkMetrics(pipelineCtx, deploymentIDs)
 
-	// Step 10: Wait for producer to complete, then wait for Flink to process records
-	fmt.Println("⏳ Waiting for producer to complete before starting consumer...")
+		// Step 10: Wait for producer to complete, then wait for Flink to process records
+		fmt.Println("⏳ Waiting for producer to complete before starting consumer...")
 
-	var producerErr error
-	select {
-	case producerErr = <-producerDone:
-		if producerErr != nil && producerErr != context.DeadlineExceeded {
-			return fmt.Errorf("producer failed: %w", producerErr)
+		var producerErr error
+		select {
+		case producerErr = <-producerDone:
+			if producerErr != nil && producerErr != context.DeadlineExceeded {
+				return fmt.Errorf("producer failed: %w", producerErr)
+			}
+			fmt.Println("✅ Producer completed successfully")
+		case <-pipelineCtx.Done():
+			fmt.Println("🛑 Pipeline timeout reached during producer phase")
+			return pipelineCtx.Err()
 		}
-		fmt.Println("✅ Producer completed successfully")
-	case <-pipelineCtx.Done():
-		fmt.Println("🛑 Pipeline timeout reached during producer phase")
-		return pipelineCtx.Err()
 	}
 
 	// Step 11: Wait for Flink job to process records before starting consumer
@@ -346,56 +353,68 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("failed waiting for Flink processing: %w", err)
 	}
 
-	// Step 12: Start consumer and wait for it to consume messages
-	fmt.Println("👂 Starting Kafka consumer to read Flink processing results...")
-
-	// Calculate expected messages if not explicitly set
-	if r.config.ExpectedMessages == 0 {
-		// Estimate based on producer stats if available
-		if r.producer != nil {
-			producerStats := r.producer.GetStats()
-			r.config.ExpectedMessages = producerStats.MessagesSent
-			fmt.Printf("📊 Expecting %d messages based on producer output\n", r.config.ExpectedMessages)
-		} else {
-			// Fallback estimation
-			r.config.ExpectedMessages = int64(float64(r.config.MessageRate) * r.config.Duration.Seconds())
-			fmt.Printf("📊 Expecting ~%d messages based on rate and duration\n", r.config.ExpectedMessages)
-		}
-	} else {
-		fmt.Printf("📊 Expecting %d messages (configured)\n", r.config.ExpectedMessages)
-	}
-
-	// Initialize consumer with Schema Registry
-	if err := r.consumer.InitializeSchemaRegistry(resources.OutputTopic); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to initialize consumer schema registry: %v\n", err)
-		fmt.Println("Consumer will run without AVRO deserialization")
-	}
-
-	// Start consumer with smart stopping logic
-	consumerDone := make(chan error, 1)
-	go func() {
-		consumerDone <- r.consumer.StartWithExpectedCount(pipelineCtx, resources.OutputTopic, r.config.ExpectedMessages)
-	}()
-
-	// Step 13: Wait for consumer to complete or pipeline timeout
+	// Step 12: Start consumer (always run; in CSV mode it will observe Flink sink output topic if applicable)
 	consumerCompleted := false
-	select {
-	case consumerErr := <-consumerDone:
-		consumerCompleted = true
-		if consumerErr != nil {
-			// Check if it's a timeout vs actual error
-			if pipelineCtx.Err() != nil {
-				fmt.Println("🛑 Consumer stopped due to pipeline timeout")
+	var consumerDone chan error
+	if r.config.CSVMode {
+		fmt.Println("📄 CSV mode: starting Kafka consumer to validate downstream topic despite filesystem source.")
+	}
+	{
+		fmt.Println("👂 Starting Kafka consumer to read Flink processing results...")
+
+		// Calculate expected messages if not explicitly set
+		if r.config.ExpectedMessages == 0 {
+			if r.config.CSVMode {
+				// In CSV mode we can't estimate from producer; use a reasonable default (all rows processed by Flink)
+				// We'll keep it zero meaning consumer will just read until timeout or completion of Flink job.
+				fmt.Println("📊 CSV mode: no expected message count derived (set --expected if you want bounded consume).")
 			} else {
-				fmt.Printf("⚠️  Consumer completed with error: %v\n", consumerErr)
+				// Estimate based on producer stats if available
+				if r.producer != nil {
+					producerStats := r.producer.GetStats()
+					r.config.ExpectedMessages = producerStats.MessagesSent
+					fmt.Printf("📊 Expecting %d messages based on producer output\n", r.config.ExpectedMessages)
+				} else {
+					// Fallback estimation
+					r.config.ExpectedMessages = int64(float64(r.config.MessageRate) * r.config.Duration.Seconds())
+					fmt.Printf("📊 Expecting ~%d messages based on rate and duration\n", r.config.ExpectedMessages)
+				}
 			}
 		} else {
-			fmt.Println("✅ Consumer completed successfully")
+			fmt.Printf("📊 Expecting %d messages (configured)\n", r.config.ExpectedMessages)
 		}
-	case <-pipelineCtx.Done():
-		fmt.Println("🛑 Pipeline timeout reached during consumer phase")
-		// Give consumer a moment to stop gracefully
-		time.Sleep(1 * time.Second)
+
+		// Initialize consumer with Schema Registry
+		if err := r.consumer.InitializeSchemaRegistry(resources.OutputTopic); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to initialize consumer schema registry: %v\n", err)
+			fmt.Println("Consumer will run without AVRO deserialization")
+		}
+
+		// Start consumer with smart stopping logic
+		consumerDone = make(chan error, 1)
+		go func() {
+			consumerDone <- r.consumer.StartWithExpectedCount(pipelineCtx, resources.OutputTopic, r.config.ExpectedMessages)
+		}()
+
+		// Step 13: Wait for consumer to complete or pipeline timeout
+		select {
+		case consumerErr := <-consumerDone:
+			consumerCompleted = true
+			if consumerErr != nil {
+				// Check if it's a timeout vs actual error
+				if pipelineCtx.Err() != nil {
+					fmt.Println("🛑 Consumer stopped due to pipeline timeout")
+				} else {
+					fmt.Printf("⚠️  Consumer completed with error: %v\n", consumerErr)
+				}
+			} else {
+				fmt.Println("✅ Consumer completed successfully")
+			}
+		case <-pipelineCtx.Done():
+			fmt.Println("🛑 Pipeline timeout reached during consumer phase")
+			// Give consumer a moment to stop gracefully
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	// Wait a bit more if consumer hasn't finished to see if it completes
