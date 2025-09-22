@@ -176,13 +176,15 @@ func (g *ProjectGenerator) generateCSVSourceTable(sqlDir string) error {
 	sanitized := sanitizeAVROIdentifier(g.ProjectName)
 	tableName := fmt.Sprintf("%s_input_csv", strings.ToLower(sanitized))
 
-	// Escape path (Flink expects a URI-like path; we write absolute path for clarity)
-	abs, err := filepath.Abs(g.InputCSVPath)
-	if err != nil {
-		abs = g.InputCSVPath
-	}
+	// Generate container path for Docker environment
+	// Users should place their CSV file in the ./data/ directory of their project
+	csvFileName := filepath.Base(g.InputCSVPath)
+	containerPath := fmt.Sprintf("/opt/flink/data/input/%s", csvFileName)
 
 	ddl := fmt.Sprintf(`-- Auto-generated CSV filesystem source table
+-- NOTE: Place your CSV file in the ./data/ directory for Docker access
+-- Host path: ./data/%s
+-- Container path: %s
 CREATE TABLE %s (
 %s
 ) WITH (
@@ -191,13 +193,57 @@ CREATE TABLE %s (
   'format' = 'csv',
   'csv.ignore-parse-errors' = 'true'
 );
-`, tableName, strings.Join(cols, ",\n"), abs)
+`, csvFileName, containerPath, tableName, strings.Join(cols, ",\n"), containerPath)
 
 	filePath := filepath.Join(sqlDir, "01_create_source_table.sql")
 	if err := os.WriteFile(filePath, []byte(ddl), 0644); err != nil {
 		return fmt.Errorf("write csv source table: %w", err)
 	}
 	fmt.Printf("🧩 Generated CSV filesystem source table DDL at %s\n", filePath)
+
+	// Create data directory and copy CSV file for Docker access
+	if err := g.setupCSVDataDirectory(csvFileName); err != nil {
+		fmt.Printf("⚠️  Warning: Failed to setup data directory: %v\n", err)
+		fmt.Printf("💡 Manual step: Copy your CSV file to ./data/%s before running\n", csvFileName)
+	}
+
+	return nil
+}
+
+// setupCSVDataDirectory creates the data directory and copies the CSV file
+func (g *ProjectGenerator) setupCSVDataDirectory(csvFileName string) error {
+	dataDir := filepath.Join(g.ProjectPath, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("create data directory: %w", err)
+	}
+
+	// Copy the original CSV file to the project data directory
+	srcFile, err := os.Open(g.InputCSVPath)
+	if err != nil {
+		return fmt.Errorf("open source CSV: %w", err)
+	}
+	defer func() {
+		if closeErr := srcFile.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close source file: %v\n", closeErr)
+		}
+	}()
+
+	dstPath := filepath.Join(dataDir, csvFileName)
+	dstFile, err := os.Create(dstPath)
+	if err != nil {
+		return fmt.Errorf("create destination CSV: %w", err)
+	}
+	defer func() {
+		if closeErr := dstFile.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close destination file: %v\n", closeErr)
+		}
+	}()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return fmt.Errorf("copy CSV file: %w", err)
+	}
+
+	fmt.Printf("📁 Copied CSV file to ./data/%s for Docker access\n", csvFileName)
 	return nil
 }
 

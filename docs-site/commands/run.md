@@ -98,6 +98,32 @@ pipegen run --project-dir ./web-events
 
 Optional: set `--expected-messages` to the approximate row count if you want early termination after full ingestion.
 
+### Docker Volume Setup
+
+When using CSV mode, the generated project includes proper Docker volume configuration:
+
+```yaml
+# In docker-compose.yml (auto-generated)
+volumes:
+  - ./data:/opt/flink/data/input  # Mount data directory for CSV files
+```
+
+**Important**: The project generation automatically:
+1. Creates a `./data/` directory in your project
+2. Copies your original CSV file to `./data/filename.csv` 
+3. Configures the Flink source table to use container path `/opt/flink/data/input/filename.csv`
+4. Sets up Docker Compose volume mounts for all Flink containers
+
+### File Paths in CSV Mode
+
+| Location | Path | Purpose |
+|----------|------|---------|
+| Your original CSV | `/path/to/your/file.csv` | Used for schema inference |
+| Project data dir | `./data/filename.csv` | Copied for Docker access |
+| Container path | `/opt/flink/data/input/filename.csv` | Referenced in Flink SQL DDL |
+
+**No manual setup required** - the project generation handles all path configuration automatically.
+
 ## Traffic Patterns
 
 The `--traffic-pattern` flag allows you to simulate realistic traffic with varying load:
