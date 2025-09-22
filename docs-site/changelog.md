@@ -8,20 +8,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **CSV Input Mode**: Initialize projects from a CSV file using `--input-csv` to infer schema, generate a filesystem Flink source table, and enrich AI prompts with real column profiling.
-- **CSV Analyzer**: Streaming, memory-safe profiling (types, nullability, sample values) powering schema inference & AI grounding.
-- **Run Auto-Detection**: `pipegen run` now detects filesystem CSV source tables (`connector=filesystem`, `format=csv`) and automatically skips only the Kafka producer while still starting the consumer.
-- **Documentation**: Updated `init`, `run`, `getting-started`, and `scaffolding` docs with CSV mode workflow and examples.
+- TBD
 
 ### Changed
-- **CSV Mode Behavior**: Consumer is no longer skipped in CSV mode; only the producer is bypassed to keep downstream validation.
+- TBD
+
+### Fixed
+- TBD
+
+---
+
+## [1.5.0] - 2025-09-22
+
+### Added
+- **🎯 CSV Input Support**: Revolutionary new way to bootstrap pipelines with real data
+  - `--input-csv` flag for `pipegen init` command enables direct CSV file input
+  - Intelligent schema inference with automatic type detection (int, double, boolean, string, dates)
+  - Support for nullable fields and union types with null
+  - Streaming CSV analysis with configurable sampling limits (up to 500 rows)
+  - Progressive type widening (int → double → string) for robust inference
+
+- **🧠 Advanced Schema Inference Engine**
+  - **Smart Type Detection**: Automatically infers column types from CSV data patterns
+  - **Nullable Field Handling**: Detects empty values and creates appropriate union types
+  - **Sample Collection**: Retains example values for better data understanding
+  - **Date/Timestamp Recognition**: Supports multiple date formats and logical types
+  - **Streaming Processing**: Memory-efficient analysis for large CSV files
+
+- **🐋 Seamless Docker Integration** 
+  - Automatic Docker volume configuration for CSV files
+  - Creates `./data/` directory in generated projects with proper structure
+  - Copies CSV files to project structure for container access
+  - Enhanced docker-compose.yml with volume mounts for all Flink containers
+  - Container path mapping (`/opt/flink/data/input/`) for filesystem connectors
+
+- **🏃‍♀️ Enhanced Runtime Support**
+  - **CSV Mode Auto-Detection**: `pipegen run` automatically detects filesystem CSV source tables
+  - **Smart Producer Skipping**: Bypasses Kafka producer when filesystem connector detected
+  - **Downstream Validation**: Still validates Kafka output and Flink job metrics
+  - **Seamless Monitoring**: Full integration with existing reporting and dashboard features
+
+- **🤖 AI Integration Enhancement**
+  - CSV analysis summary integration with LLM-powered generation
+  - Real data context for more accurate AI-generated pipelines
+  - Combined CSV + AI description workflows for optimal results
+
+- **📚 Comprehensive Documentation**
+  - Enhanced `init.md` with CSV input examples and workflows
+  - Updated `run.md` with CSV mode explanation and behavior differences
+  - New sections in feature documentation for CSV capabilities
+  - Updated getting started guide with CSV-first workflow examples
+
+### Changed
+- **CSV Mode Behavior**: Only Kafka producer is skipped in CSV mode; consumer validation maintained for downstream output verification
+- **Template System**: Enhanced Docker compose template with automatic volume mount generation
+- **Project Structure**: CSV mode projects include dedicated `data/` directory with proper file organization
 
 ### Internal
-- Added `CSVMode` flag to pipeline config; detection logic in `cmd/run.go`.
-- Refactored runner to branch only around producer startup while retaining consumer logic.
+- Added comprehensive `CSVAnalyzer` component (`internal/generator/csv_analyzer.go`) for streaming CSV profiling
+- Enhanced project generator with CSV-specific schema and DDL generation capabilities
+- Added `CSVMode` detection logic in `cmd/run.go` for runtime behavior switching
+- Refactored pipeline runner to conditionally branch around producer startup
+- Added extensive test coverage for CSV analysis and type inference
+- Integrated CSV analysis with existing LLM service for enhanced AI generation
 
-### Pending
-- Additional examples page showcasing CSV-to-aggregation end-to-end.
+### Performance
+- Memory-efficient streaming CSV analysis (configurable row sampling)
+- Optimized type inference with early termination for large files
+- Efficient Docker volume setup and file copying
+
+### Backward Compatibility
+- All existing functionality remains unchanged
+- New flags are optional and don't affect existing workflows
+- Kafka-based pipelines continue to work as before
+- Docker compose templates include new volume mounts by default without breaking changes
 
 # Changelog
 
