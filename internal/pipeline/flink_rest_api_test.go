@@ -112,3 +112,97 @@ func TestDeployStatement_ErrorFlow(t *testing.T) {
 		t.Fatalf("expected at least one poll")
 	}
 }
+
+// TestFetchOperationResult_Success simulates FINISHED status where a subsequent call to fetchOperationResult
+// should obtain result payload (e.g., catalog info or query result). We exercise both primary (/result/0)
+// and legacy (/result) fallback by first letting primary succeed, then legacy path in a second subtest.
+func TestFetchOperationResult_Success(t *testing.T) {
+	t.Run("primary-endpoint", func(t *testing.T) {
+		fd := NewFlinkDeployer(&Config{FlinkURL: "http://unused:8081"})
+		sessionID := "sess-ok"
+		opHandle := "op-ok"
+		// Gateway server: create session, submit statement, FINISHED status, primary result endpoint returns payload
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.Method == http.MethodPost && r.URL.Path == "/v1/sessions":
+				_ = json.NewEncoder(w).Encode(map[string]string{"sessionHandle": sessionID})
+			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/statements"):
+				_ = json.NewEncoder(w).Encode(map[string]string{"operationHandle": opHandle})
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/status"):
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "FINISHED"})
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/result/0"):
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []map[string]string{{"col": "val"}}})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer srv.Close()
+		fd.config.FlinkURL = srv.URL
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		sid, err := fd.createSessionWithRetry(ctx, "pipegen-test", 2, 50*time.Millisecond)
+		if err != nil {
+			t.Fatalf("session creation failed: %v", err)
+		}
+		fd.sessionID = sid
+		// Deploy (FINISHED immediately)
+		if _, err := fd.deployStatement(ctx, "finished-statement", "CREATE TABLE done (id STRING)"); err != nil {
+			t.Fatalf("deployStatement failed: %v", err)
+		}
+		// Explicitly call fetchOperationResult to validate direct retrieval
+		res, err := fd.fetchOperationResult(ctx, strings.Replace(fd.config.FlinkURL, "8081", "8083", 1), opHandle)
+		if err != nil {
+			t.Fatalf("fetchOperationResult error: %v", err)
+		}
+		if !strings.Contains(res, "\"col\":\"val\"") {
+			t.Fatalf("expected result payload, got: %s", res)
+		}
+	})
+
+	t.Run("legacy-endpoint-fallback", func(t *testing.T) {
+		fd := NewFlinkDeployer(&Config{FlinkURL: "http://unused:8081"})
+		sessionID := "sess-legacy"
+		opHandle := "op-legacy"
+		// Server returns 404 for primary /result/0 then serves payload at legacy /result
+		var primaryHits int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.Method == http.MethodPost && r.URL.Path == "/v1/sessions":
+				_ = json.NewEncoder(w).Encode(map[string]string{"sessionHandle": sessionID})
+			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/statements"):
+				_ = json.NewEncoder(w).Encode(map[string]string{"operationHandle": opHandle})
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/status"):
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "FINISHED"})
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/result/0"):
+				atomic.AddInt32(&primaryHits, 1)
+				http.Error(w, "not found", http.StatusNotFound)
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/result"):
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []map[string]int{{"x": 1}}})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer srv.Close()
+		fd.config.FlinkURL = srv.URL
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		sid, err := fd.createSessionWithRetry(ctx, "pipegen-test", 2, 50*time.Millisecond)
+		if err != nil {
+			t.Fatalf("session creation failed: %v", err)
+		}
+		fd.sessionID = sid
+		if _, err := fd.deployStatement(ctx, "finished-statement", "CREATE TABLE done (id STRING)"); err != nil {
+			t.Fatalf("deployStatement failed: %v", err)
+		}
+		res, err := fd.fetchOperationResult(ctx, strings.Replace(fd.config.FlinkURL, "8081", "8083", 1), opHandle)
+		if err != nil {
+			t.Fatalf("fetchOperationResult error: %v", err)
+		}
+		if !strings.Contains(res, "\"x\":1") {
+			t.Fatalf("expected legacy result payload, got: %s", res)
+		}
+		if atomic.LoadInt32(&primaryHits) == 0 {
+			t.Fatalf("expected at least one primary /result/0 attempt")
+		}
+	})
+}
