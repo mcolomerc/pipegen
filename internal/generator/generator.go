@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -16,7 +15,19 @@ import (
 
 	"pipegen/internal/pipeline"
 	"pipegen/internal/templates"
+	"pipegen/internal/version"
 )
+
+// ProjectGenerator handles the creation of new streaming pipeline projects
+type ProjectGenerator struct {
+	ProjectName        string
+	ProjectPath        string
+	LocalMode          bool
+	InputSchemaPath    string
+	InputSchemaContent string
+	InputCSVPath       string
+	templateManager    *templates.Manager
+}
 
 // sanitizeAVROIdentifier converts a string to a valid AVRO identifier
 // AVRO identifiers must match [A-Za-z_][A-Za-z0-9_]*
@@ -36,17 +47,6 @@ func sanitizeAVROIdentifier(s string) string {
 	}
 
 	return sanitized
-}
-
-// ProjectGenerator handles the creation of new streaming pipeline projects
-type ProjectGenerator struct {
-	ProjectName        string
-	ProjectPath        string
-	LocalMode          bool
-	InputSchemaPath    string
-	InputSchemaContent string
-	InputCSVPath       string
-	templateManager    *templates.Manager
 }
 
 // NewProjectGenerator creates a new project generator instance
@@ -702,22 +702,26 @@ func (g *ProjectGenerator) generateConnectors() error {
 		return fmt.Errorf("failed to create connectors directory: %w", err)
 	}
 
-	// Get connectors.txt content from template
-	connectorsContent, err := g.templateManager.RenderConnectors()
-	if err != nil {
-		return fmt.Errorf("failed to render connectors template: %w", err)
+	// Build list dynamically from version constants.
+	base := "https://repo1.maven.org/maven2"
+	flinkFormat := version.FlinkFormatVersion
+	compat := version.FlinkConnectorCompat
+	kafkaConnVer := version.KafkaConnectorVersion
+
+	urls := []string{
+		fmt.Sprintf("%s/org/apache/flink/flink-connector-kafka/%s-%s/flink-connector-kafka-%s-%s.jar", base, kafkaConnVer, compat, kafkaConnVer, compat),
+		fmt.Sprintf("%s/org/apache/flink/flink-sql-connector-kafka/%s-%s/flink-sql-connector-kafka-%s-%s.jar", base, kafkaConnVer, compat, kafkaConnVer, compat),
+		fmt.Sprintf("%s/org/apache/flink/flink-sql-avro-confluent-registry/%s/flink-sql-avro-confluent-registry-%s.jar", base, version.AvroConfluentRegistryVersion, version.AvroConfluentRegistryVersion),
+		fmt.Sprintf("%s/org/apache/kafka/kafka-clients/%s/kafka-clients-%s.jar", base, version.KafkaClientsVersion, version.KafkaClientsVersion),
+		fmt.Sprintf("%s/com/fasterxml/jackson/core/jackson-core/%s/jackson-core-%s.jar", base, version.JacksonVersion, version.JacksonVersion),
+		fmt.Sprintf("%s/com/fasterxml/jackson/core/jackson-databind/%s/jackson-databind-%s.jar", base, version.JacksonVersion, version.JacksonVersion),
+		fmt.Sprintf("%s/com/fasterxml/jackson/core/jackson-annotations/%s/jackson-annotations-%s.jar", base, version.JacksonVersion, version.JacksonVersion),
+		fmt.Sprintf("%s/com/google/guava/guava/%s/guava-%s.jar", base, version.GuavaVersion, version.GuavaVersion),
+		fmt.Sprintf("%s/org/apache/flink/flink-json/%s/flink-json-%s.jar", base, flinkFormat, flinkFormat),
+		fmt.Sprintf("%s/org/apache/flink/flink-csv/%s/flink-csv-%s.jar", base, flinkFormat, flinkFormat),
 	}
 
-	// Parse URLs from content
-	urls := g.parseConnectorURLs(connectorsContent)
-	if len(urls) == 0 {
-		fmt.Println("⚠️  No connector URLs found in template")
-		return nil
-	}
-
-	fmt.Printf("📥 Downloading %d Flink connectors...\n", len(urls))
-
-	// Download each connector
+	fmt.Printf("📥 Downloading %d Flink connectors (generated from version constants)...\n", len(urls))
 	for i, connectorURL := range urls {
 		if err := g.downloadConnector(connectorsDir, connectorURL, i+1, len(urls)); err != nil {
 			fmt.Printf("⚠️  Failed to download connector %d/%d: %v\n", i+1, len(urls), err)
@@ -730,21 +734,7 @@ func (g *ProjectGenerator) generateConnectors() error {
 }
 
 // parseConnectorURLs parses URLs from the connectors.txt content
-func (g *ProjectGenerator) parseConnectorURLs(content string) []string {
-	var urls []string
-	scanner := bufio.NewScanner(strings.NewReader(content))
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		urls = append(urls, line)
-	}
-
-	return urls
-}
+// parseConnectorURLs removed since connectors are now generated dynamically from version constants
 
 // downloadConnector downloads a single connector JAR file
 func (g *ProjectGenerator) downloadConnector(connectorsDir, connectorURL string, current, total int) error {
