@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   broker:
-    image: apache/kafka:3.8.1
+    image: {{ .KafkaImage }}
     hostname: broker
     container_name: broker
     ports:
@@ -42,7 +42,7 @@ services:
 
 
   flink-jobmanager:
-    image: flink:1.18.0-scala_2.12-java11
+    image: {{ .FlinkImage }}
     hostname: flink-jobmanager
     container_name: flink-jobmanager
     ports:
@@ -66,7 +66,7 @@ services:
       retries: 5
 
   flink-taskmanager:
-    image: flink:1.18.0-scala_2.12-java11
+    image: {{ .FlinkImage }}
     hostname: flink-taskmanager
     container_name: flink-taskmanager
     depends_on:
@@ -85,7 +85,7 @@ services:
 
   # Flink SQL Gateway
   sql-gateway:
-    image: flink:1.18.0-scala_2.12-java11
+    image: {{ .FlinkImage }}
     container_name: sql-gateway
     command: >
       sh -c " 
@@ -107,7 +107,7 @@ services:
 
 
   schema-registry:
-    image: confluentinc/cp-schema-registry:8.0.0
+    image: {{ .SchemaRegistryImage }}
     hostname: schema-registry
     container_name: schema-registry
     depends_on:

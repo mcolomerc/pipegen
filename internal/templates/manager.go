@@ -13,12 +13,15 @@ var templatesFS embed.FS
 
 // TemplateData contains data for template rendering
 type TemplateData struct {
-	ProjectName        string
-	ProjectNameTitle   string
-	SanitizedName      string
-	Description        string
-	Optimizations      []string
-	WithSchemaRegistry bool
+	ProjectName         string
+	ProjectNameTitle    string
+	SanitizedName       string
+	Description         string
+	Optimizations       []string
+	WithSchemaRegistry  bool
+	FlinkImage          string
+	KafkaImage          string
+	SchemaRegistryImage string
 }
 
 // Manager handles template rendering

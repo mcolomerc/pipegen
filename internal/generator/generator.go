@@ -653,8 +653,15 @@ func (g *ProjectGenerator) generateDockerFiles() error {
 }
 
 func (g *ProjectGenerator) generateDockerCompose() error {
+	flinkImage := fmt.Sprintf("flink:%s-scala_%s-java11", version.FlinkVersion, version.FlinkScalaVersion)
+	kafkaImage := fmt.Sprintf("apache/kafka:%s", version.KafkaBrokerVersion)
+	schemaRegistryImage := fmt.Sprintf("confluentinc/cp-schema-registry:%s", version.SchemaRegistryImageTag)
+
 	templateData := templates.TemplateData{
-		WithSchemaRegistry: true, // Include Schema Registry by default
+		WithSchemaRegistry:  true, // Include Schema Registry by default
+		FlinkImage:          flinkImage,
+		KafkaImage:          kafkaImage,
+		SchemaRegistryImage: schemaRegistryImage,
 	}
 
 	composeContent, err := g.templateManager.RenderDockerCompose(templateData)

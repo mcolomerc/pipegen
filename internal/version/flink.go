@@ -26,6 +26,10 @@ const (
 	KafkaClientsVersion = "3.7.0"
 	JacksonVersion      = "2.17.2"
 	GuavaVersion        = "33.2.1-jre"
+
+	// Runtime service images
+	KafkaBrokerVersion     = "4.0.0" // Apache Kafka image tag
+	SchemaRegistryImageTag = "8.0.0" // Confluent Schema Registry (review for compatibility)
 )
 
 // Derived helper functions (if needed later) can be added here.
