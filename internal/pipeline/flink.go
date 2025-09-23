@@ -109,40 +109,12 @@ func (fd *FlinkDeployer) deployGlobal(ctx context.Context, statements []*types.S
 func (fd *FlinkDeployer) deploySessionBased(ctx context.Context, statements []*types.SQLStatement, resources *Resources) ([]string, error) {
 	var deploymentIDs []string
 
-	// Create a session once for all statements
-	// Use SQL Gateway URL (typically FlinkURL with port 8083)
-	sqlGatewayURL := strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
-	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", sqlGatewayURL)
-	sessionReqBody := `{"sessionName": "pipegen-session", "properties": {}}`
-	sessionReq, err := http.NewRequestWithContext(ctx, "POST", sessionEndpoint, strings.NewReader(sessionReqBody))
+	// Create (or retry creating) a session once for all statements using resilient helper
+	sessID, err := fd.createSessionWithRetry(ctx, "pipegen-session", 7, 2*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session request: %w", err)
+		return nil, err
 	}
-	sessionReq.Header.Set("Content-Type", "application/json")
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		fmt.Printf("⚠️  Session creation request failed: %v\n", err)
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-	defer func() {
-		if err := sessionResp.Body.Close(); err != nil {
-			fmt.Printf("failed to close sessionResp.Body: %v\n", err)
-		}
-	}()
-	sessionBody, err := io.ReadAll(sessionResp.Body)
-	if err != nil {
-		fmt.Printf("⚠️  Failed to read session response: %v\n", err)
-		return nil, fmt.Errorf("failed to read session response: %w", err)
-	}
-	if sessionResp.StatusCode != 200 {
-		fmt.Printf("⚠️  Session creation failed with status %d: %s\n", sessionResp.StatusCode, string(sessionBody))
-		return nil, fmt.Errorf("flink SQL Gateway session creation failed: %s", string(sessionBody))
-	}
-	fd.sessionID = extractSessionID(string(sessionBody))
-	if fd.sessionID == "" {
-		fmt.Printf("⚠️  Could not extract session ID from response: %s\n", string(sessionBody))
-		return nil, fmt.Errorf("could not extract session ID from response: %s", string(sessionBody))
-	}
+	fd.sessionID = sessID
 
 	for i, stmt := range statements {
 		fmt.Printf("📝 Deploying statement %d: %s\n", i+1, stmt.Name)
@@ -485,6 +457,16 @@ func (fd *FlinkDeployer) fetchOperationResult(ctx context.Context, baseURL, oper
 // extractSessionID parses the session id from the session creation response
 func extractSessionID(resp string) string {
 	// Updated extraction: look for "sessionHandle":"..."
+	// Prefer JSON parsing (resilient to spacing / ordering)
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(resp), &parsed); err == nil {
+		if v, ok := parsed["sessionHandle"]; ok {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+	}
+	// Fallback to substring search
 	idx := strings.Index(resp, "\"sessionHandle\":\"")
 	if idx == -1 {
 		return ""
@@ -503,6 +485,90 @@ func escapeJSONString(s string) string {
 	s = strings.ReplaceAll(s, "\"", "\\\"")
 	s = strings.ReplaceAll(s, "\n", "\\n")
 	return s
+}
+
+// createSessionWithRetry attempts to create a Flink SQL Gateway session with retries & backoff.
+// Rationale: After container startup the gateway port (8083) may accept connections but the
+// backend service (Dispatcher / REST endpoint) might still be initializing, causing connection
+// resets (ECONNRESET) or 5xx/4xx transient errors. We retry a limited number of times with
+// exponential backoff and jitter-less simplicity (deterministic) to keep logs predictable.
+func (fd *FlinkDeployer) createSessionWithRetry(ctx context.Context, sessionName string, maxAttempts int, initialBackoff time.Duration) (string, error) {
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	sqlGatewayURL := strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
+	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", sqlGatewayURL)
+	payload := fmt.Sprintf(`{"sessionName": "%s", "properties": {}}`, sessionName)
+
+	var lastErr error
+	backoff := initialBackoff
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("context cancelled while creating session: %w", ctx.Err())
+		default:
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", sessionEndpoint, strings.NewReader(payload))
+		if err != nil {
+			return "", fmt.Errorf("failed to build session request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("session creation attempt %d/%d failed: %w", attempt, maxAttempts, err)
+			fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+		} else {
+			body, rerr := io.ReadAll(resp.Body)
+			if cerr := resp.Body.Close(); cerr != nil {
+				fmt.Printf("failed to close session body: %v\n", cerr)
+			}
+			if rerr != nil {
+				lastErr = fmt.Errorf("failed reading session response (attempt %d): %w", attempt, rerr)
+				fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			} else if resp.StatusCode == 200 {
+				id := extractSessionID(string(body))
+				if id != "" {
+					if attempt > 1 {
+						fmt.Printf("[Flink SQL Gateway] ✅ Session created after %d attempts. ID=%s\n", attempt, id)
+					} else {
+						fmt.Printf("[Flink SQL Gateway] ✅ Session created. ID=%s\n", id)
+					}
+					return id, nil
+				}
+				lastErr = fmt.Errorf("attempt %d: session ID missing in response: %s", attempt, string(body))
+				fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			} else {
+				lastErr = fmt.Errorf("attempt %d: non-200 status %d: %s", attempt, resp.StatusCode, string(body))
+				fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			}
+		}
+
+		// Backoff before next attempt if not last
+		if attempt < maxAttempts {
+			fmt.Printf("[Flink SQL Gateway] ⏳ Retrying session creation in %s (attempt %d/%d)\n", backoff, attempt, maxAttempts)
+			timer := time.NewTimer(backoff)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return "", fmt.Errorf("context cancelled during backoff: %w", ctx.Err())
+			case <-timer.C:
+			}
+			// Exponential backoff cap at 30s
+			backoff = backoff * 2
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown failure creating session")
+	}
+	return "", lastErr
 }
 
 // writeTempSQLFile writes the SQL content to a temporary file

@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// StackDeployer handles deployment operations for the local stack
+// StackDeployer handles end-to-end local stack resource provisioning (topics, schemas, Flink SQL jobs)
 type StackDeployer struct {
 	projectDir         string
 	kafkaAddr          string
@@ -28,7 +28,7 @@ type StackDeployer struct {
 	sqlGatewayAddr     string
 }
 
-// NewStackDeployer creates a new stack deployer
+// NewStackDeployer creates a new stack deployer configured from viper flags / env.
 func NewStackDeployer(projectDir string) *StackDeployer {
 	// Read configuration from viper
 	kafkaAddr := viper.GetString("bootstrap_servers")
@@ -424,36 +424,75 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQ
 // createFlinkSession creates a new Flink SQL Gateway session
 func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Client) (string, error) {
 	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", d.sqlGatewayAddr)
-	sessionReqBody := `{"sessionName": "pipegen-deploy-session", "properties": {}}`
+	payload := `{"sessionName": "pipegen-deploy-session", "properties": {}}`
 
-	sessionReq, err := http.NewRequestWithContext(ctx, "POST", sessionEndpoint, strings.NewReader(sessionReqBody))
-	if err != nil {
-		return "", fmt.Errorf("failed to create session request: %w", err)
+	maxAttempts := 6
+	backoff := 1500 * time.Millisecond
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("context cancelled while creating local session: %w", ctx.Err())
+		default:
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", sessionEndpoint, strings.NewReader(payload))
+		if err != nil {
+			return "", fmt.Errorf("failed to build session request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("attempt %d/%d: %w", attempt, maxAttempts, err)
+			fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+		} else {
+			body, rerr := io.ReadAll(resp.Body)
+			if cerr := resp.Body.Close(); cerr != nil {
+				fmt.Printf("failed to close session body: %v\n", cerr)
+			}
+			if rerr != nil {
+				lastErr = fmt.Errorf("failed reading session response (attempt %d): %w", attempt, rerr)
+				fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			} else if resp.StatusCode == 200 {
+				id := d.extractSessionID(string(body))
+				if id != "" {
+					if attempt > 1 {
+						fmt.Printf("[Local Flink SQL Gateway] ✅ Session created after %d attempts. ID=%s\n", attempt, id)
+					} else {
+						fmt.Printf("[Local Flink SQL Gateway] ✅ Session created. ID=%s\n", id)
+					}
+					return id, nil
+				}
+				lastErr = fmt.Errorf("attempt %d: session ID missing in response: %s", attempt, string(body))
+				fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			} else {
+				lastErr = fmt.Errorf("attempt %d: non-200 status %d: %s", attempt, resp.StatusCode, string(body))
+				fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			}
+		}
+
+		if attempt < maxAttempts {
+			fmt.Printf("[Local Flink SQL Gateway] ⏳ Retrying session creation in %s (attempt %d/%d)\n", backoff, attempt, maxAttempts)
+			timer := time.NewTimer(backoff)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return "", fmt.Errorf("context cancelled during backoff: %w", ctx.Err())
+			case <-timer.C:
+			}
+			backoff = backoff * 2
+			if backoff > 20*time.Second {
+				backoff = 20 * time.Second
+			}
+		}
 	}
-	sessionReq.Header.Set("Content-Type", "application/json")
-
-	sessionResp, err := client.Do(sessionReq)
-	if err != nil {
-		return "", fmt.Errorf("failed to create session: %w", err)
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown failure creating session")
 	}
-	defer func() { _ = sessionResp.Body.Close() }()
-
-	sessionBody, err := io.ReadAll(sessionResp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read session response: %w", err)
-	}
-
-	if sessionResp.StatusCode != 200 {
-		return "", fmt.Errorf("session creation failed with status %d: %s", sessionResp.StatusCode, string(sessionBody))
-	}
-
-	sessionID := d.extractSessionID(string(sessionBody))
-	if sessionID == "" {
-		return "", fmt.Errorf("could not extract session ID from response: %s", string(sessionBody))
-	}
-
-	fmt.Printf("[Flink SQL Gateway] Session creation response: %s\n", string(sessionBody))
-	return sessionID, nil
+	return "", lastErr
 }
 
 // extractSessionID extracts session ID from Flink SQL Gateway response
