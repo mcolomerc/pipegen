@@ -33,6 +33,64 @@ type FlinkDeployer struct {
 	globalMode     bool // New field to enable global table creation
 }
 
+// getSQLGatewayURL resolves the SQL Gateway base URL. Preference order:
+// 1. Explicit Config.SQLGatewayURL if provided.
+// 2. Derive from FlinkURL by replacing :8081 with :8083 (common local convention).
+// 3. If no port substitution possible, append :8083 if missing.
+func (fd *FlinkDeployer) getSQLGatewayURL() string {
+	if fd.config.SQLGatewayURL != "" {
+		return fd.config.SQLGatewayURL
+	}
+	if strings.Contains(fd.config.FlinkURL, "8081") {
+		return strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
+	}
+	// If FlinkURL already ends with a port, just return as-is (assume correct)
+	if strings.Count(fd.config.FlinkURL, ":") >= 2 { // scheme://host:port
+		return fd.config.FlinkURL
+	}
+	// Append default gateway port
+	return strings.TrimRight(fd.config.FlinkURL, "/") + ":8083"
+}
+
+// waitForSQLGatewayReady performs a lightweight readiness check by polling the sessions list endpoint.
+// It tolerates transient connection resets. Returns nil when it receives any HTTP 200 response.
+func (fd *FlinkDeployer) waitForSQLGatewayReady(ctx context.Context, baseURL string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	endpoint := fmt.Sprintf("%s/v1/sessions", baseURL)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for SQL Gateway readiness: %w", ctx.Err())
+		default:
+		}
+		req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+		if err != nil {
+			return fmt.Errorf("failed to build readiness request: %w", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			fmt.Printf("[Flink SQL Gateway] (readiness) transient error: %v\n", err)
+			time.Sleep(750 * time.Millisecond)
+			continue
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode == 200 { // Ready
+			fmt.Printf("[Flink SQL Gateway] Readiness confirmed (HTTP 200)\n")
+			return nil
+		}
+		lastErr = fmt.Errorf("status %d", resp.StatusCode)
+		fmt.Printf("[Flink SQL Gateway] (readiness) received status %d, retrying...\n", resp.StatusCode)
+		time.Sleep(750 * time.Millisecond)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown readiness failure")
+	}
+	return lastErr
+}
+
 // NewFlinkDeployer creates a new FlinkSQL deployer
 func NewFlinkDeployer(config *Config) *FlinkDeployer {
 	fd := &FlinkDeployer{
@@ -110,6 +168,14 @@ func (fd *FlinkDeployer) deploySessionBased(ctx context.Context, statements []*t
 	var deploymentIDs []string
 
 	// Create (or retry creating) a session once for all statements using resilient helper
+	// Resolve SQL Gateway URL and perform a brief readiness wait (up to 8s) before retries
+	gwURL := fd.getSQLGatewayURL()
+	readinessCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	if err := fd.waitForSQLGatewayReady(readinessCtx, gwURL, 8*time.Second); err != nil {
+		fmt.Printf("[Flink SQL Gateway] Readiness wait did not confirm availability: %v (continuing with session retry)\n", err)
+	}
+	cancel()
+
 	sessID, err := fd.createSessionWithRetry(ctx, "pipegen-session", 7, 2*time.Second)
 	if err != nil {
 		return nil, err

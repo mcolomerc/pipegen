@@ -65,3 +65,32 @@ func TestCreateSessionWithRetry_Fails(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 }
+
+// Test readiness helper: gateway returns non-200 then 200
+func TestWaitForSQLGatewayReady(t *testing.T) {
+	fd := NewFlinkDeployer(&Config{FlinkURL: "http://unused:8081"})
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/sessions" {
+			n := atomic.AddInt32(&hits, 1)
+			if n < 2 {
+				http.Error(w, "starting", http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	fd.config.FlinkURL = srv.URL
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := fd.waitForSQLGatewayReady(ctx, srv.URL, 3*time.Second); err != nil {
+		t.Fatalf("expected readiness success, got %v", err)
+	}
+	if atomic.LoadInt32(&hits) < 2 {
+		t.Fatalf("expected at least 2 readiness attempts, got %d", hits)
+	}
+}

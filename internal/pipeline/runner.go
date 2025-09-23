@@ -35,6 +35,7 @@ type Config struct {
 	DryRun            bool
 	BootstrapServers  string
 	FlinkURL          string
+	SQLGatewayURL     string // Explicit SQL Gateway base URL (overrides FlinkURL port substitution when set)
 	SchemaRegistryURL string
 	LocalMode         bool
 	GenerateReport    bool             // New field to enable report generation

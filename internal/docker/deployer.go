@@ -28,6 +28,44 @@ type StackDeployer struct {
 	sqlGatewayAddr     string
 }
 
+// waitForLocalSQLGatewayReady polls the /v1/sessions endpoint until it returns 200 or timeout.
+func (d *StackDeployer) waitForLocalSQLGatewayReady(ctx context.Context, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	endpoint := fmt.Sprintf("%s/v1/sessions", d.sqlGatewayAddr)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled during local SQL Gateway readiness: %w", ctx.Err())
+		default:
+		}
+		req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+		if err != nil {
+			return fmt.Errorf("failed to build readiness request: %w", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			fmt.Printf("[Local Flink SQL Gateway] (readiness) transient error: %v\n", err)
+			time.Sleep(750 * time.Millisecond)
+			continue
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode == 200 {
+			fmt.Printf("[Local Flink SQL Gateway] Readiness confirmed (HTTP 200)\n")
+			return nil
+		}
+		lastErr = fmt.Errorf("status %d", resp.StatusCode)
+		fmt.Printf("[Local Flink SQL Gateway] (readiness) status %d, retrying...\n", resp.StatusCode)
+		time.Sleep(750 * time.Millisecond)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown readiness failure")
+	}
+	return lastErr
+}
+
 // NewStackDeployer creates a new stack deployer configured from viper flags / env.
 func NewStackDeployer(projectDir string) *StackDeployer {
 	// Read configuration from viper
@@ -425,6 +463,13 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQ
 func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Client) (string, error) {
 	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", d.sqlGatewayAddr)
 	payload := `{"sessionName": "pipegen-deploy-session", "properties": {}}`
+
+	// Readiness wait (non-fatal) up to 8s
+	readyCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	if err := d.waitForLocalSQLGatewayReady(readyCtx, 8*time.Second); err != nil {
+		fmt.Printf("[Local Flink SQL Gateway] Readiness not confirmed before session attempts: %v (continuing)\n", err)
+	}
+	cancel()
 
 	maxAttempts := 6
 	backoff := 1500 * time.Millisecond
