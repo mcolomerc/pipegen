@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	logpkg "pipegen/internal/log"
 )
 
 // CSVAnalyzer performs streaming profiling and type inference on a CSV file.
@@ -22,6 +24,7 @@ type CSVAnalyzer struct {
 	Delimiter  rune
 	HasHeader  bool
 	Timezone   *time.Location
+	logger     logpkg.Logger
 }
 
 // ColumnProfile holds inferred stats for a single column.
@@ -67,6 +70,7 @@ func NewCSVAnalyzer(path string) *CSVAnalyzer {
 		Delimiter:  ',',
 		HasHeader:  true,
 		Timezone:   time.UTC,
+		logger:     logpkg.Global(),
 	}
 }
 
@@ -78,7 +82,9 @@ func (a *CSVAnalyzer) Analyze() (*AnalysisResult, error) {
 	}
 	defer func() {
 		if cerr := file.Close(); cerr != nil {
-			fmt.Printf("⚠️  failed to close CSV file: %v\n", cerr)
+			if a.logger != nil {
+				a.logger.Warn("failed closing csv file", "err", cerr)
+			}
 		}
 	}()
 

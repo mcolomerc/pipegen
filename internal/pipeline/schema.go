@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	logpkg "pipegen/internal/log"
 )
 
 // Schema represents an AVRO schema
@@ -28,12 +30,14 @@ type SchemaField struct {
 // SchemaLoader handles loading and parsing AVRO schemas from files
 type SchemaLoader struct {
 	projectDir string
+	logger     logpkg.Logger
 }
 
 // NewSchemaLoader creates a new schema loader
 func NewSchemaLoader(projectDir string) *SchemaLoader {
 	return &SchemaLoader{
 		projectDir: projectDir,
+		logger:     logpkg.Global(),
 	}
 }
 
@@ -78,9 +82,11 @@ func (loader *SchemaLoader) LoadSchemas() (map[string]*Schema, error) {
 		return nil, fmt.Errorf("no AVRO schema files found in %s", schemaDir)
 	}
 
-	fmt.Printf("📋 Loaded %d AVRO schemas from %s\n", len(schemas), schemaDir)
-	for key, schema := range schemas {
-		fmt.Printf("  - %s: %s.%s\n", key, schema.Namespace, schema.Name)
+	if loader.logger != nil {
+		loader.logger.Info("loaded avro schemas", "count", len(schemas), "dir", schemaDir)
+		for key, schema := range schemas {
+			loader.logger.Debug("schema", "key", key, "namespace", schema.Namespace, "name", schema.Name)
+		}
 	}
 
 	return schemas, nil
@@ -254,7 +260,7 @@ func (sr *SchemaRegistry) RegisterSchema(subject string, schema *Schema) (int, e
 	// TODO: Implement actual Schema Registry API call
 	// This is a placeholder for the actual implementation
 
-	fmt.Printf("📋 Registering schema for subject: %s\n", subject)
+	// Logging could be added by passing a logger; omitted to keep SchemaRegistry decoupled.
 
 	// Here you would use the Schema Registry HTTP API to:
 	// 1. Check compatibility with existing schemas

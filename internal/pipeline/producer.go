@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"time"
 
+	logpkg "pipegen/internal/log"
+
 	"github.com/linkedin/goavro/v2"
 	"github.com/riferrei/srclient"
 	"github.com/segmentio/kafka-go"
@@ -22,11 +24,13 @@ type Producer struct {
 	schema       *Schema   // Store schema for dynamic message generation
 	messageCount int64     // Track actual messages sent
 	startTime    time.Time // Track when producer started
+	logger       logpkg.Logger
 }
 
 // NewProducer creates a new Kafka producer
 func NewProducer(config *Config) (*Producer, error) {
-	fmt.Printf("📤 Creating producer with bootstrap servers: %s\n", config.BootstrapServers)
+	logger := logpkg.Global()
+	logger.Info("creating producer", "bootstrap", config.BootstrapServers)
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(config.BootstrapServers),
 		Balancer:     &kafka.LeastBytes{},
@@ -34,7 +38,7 @@ func NewProducer(config *Config) (*Producer, error) {
 		BatchSize:    100,
 	}
 
-	fmt.Printf("  ✅ Writer configured with address: %s\n", config.BootstrapServers)
+	logger.Info("writer configured", "address", config.BootstrapServers)
 
 	return &Producer{
 		config:       config,
@@ -42,12 +46,13 @@ func NewProducer(config *Config) (*Producer, error) {
 		srClient:     nil, // Will be initialized when schema is provided
 		messageCount: 0,
 		startTime:    time.Now(),
+		logger:       logger,
 	}, nil
 }
 
 // InitializeSchemaRegistry initializes the Schema Registry client and gets the existing schema
 func (p *Producer) InitializeSchemaRegistry(schema *Schema, subject string) error {
-	fmt.Printf("🔗 Initializing Schema Registry client for subject: %s\n", subject)
+	p.logger.Info("init schema registry", "subject", subject)
 
 	// Store schema for dynamic message generation
 	p.schema = schema
@@ -59,14 +64,14 @@ func (p *Producer) InitializeSchemaRegistry(schema *Schema, subject string) erro
 	schemaObj, err := p.srClient.GetLatestSchema(subject)
 	if err != nil {
 		// If schema doesn't exist, register it manually
-		fmt.Printf("  📋 Schema not found for subject %s, registering new schema\n", subject)
+		p.logger.Info("schema not found registering", "subject", subject)
 		schemaObj, err = p.srClient.CreateSchema(subject, schema.Content, srclient.Avro)
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
-		fmt.Printf("  ✅ Schema registered with ID: %d\n", schemaObj.ID())
+		p.logger.Info("schema registered", "id", schemaObj.ID())
 	} else {
-		fmt.Printf("  ✅ Using existing schema with ID: %d\n", schemaObj.ID())
+		p.logger.Info("using existing schema", "id", schemaObj.ID())
 	}
 
 	p.schemaID = schemaObj.ID()
@@ -83,12 +88,12 @@ func (p *Producer) InitializeSchemaRegistry(schema *Schema, subject string) erro
 
 // Start begins producing messages to the specified topic with support for dynamic traffic patterns
 func (p *Producer) Start(ctx context.Context, topic string, schema *Schema) error {
-	fmt.Printf("📤 Starting producer for topic: %s\n", topic)
+	p.logger.Info("starting producer", "topic", topic)
 
 	if p.config.TrafficPatterns != nil && p.config.TrafficPatterns.HasPatterns() {
-		fmt.Printf("📊 Traffic pattern configured:\n%s\n", p.config.TrafficPatterns.GetPatternSummary())
+		p.logger.Info("traffic pattern configured", "summary", p.config.TrafficPatterns.GetPatternSummary())
 	} else {
-		fmt.Printf("📊 Message rate: %d msg/sec (constant)\n", p.config.MessageRate)
+		p.logger.Info("message rate constant", "rate", p.config.MessageRate)
 	}
 
 	// Set topic for writer
@@ -125,12 +130,12 @@ func (p *Producer) startWithTrafficPatterns(ctx context.Context, schema *Schema)
 	lastLoggedRate := currentRate
 	nextRateCheck := time.Now().Add(100 * time.Millisecond) // Check rate every 100ms
 
-	fmt.Printf("📈 Starting with rate: %d msg/sec\n", currentRate)
+	p.logger.Info("starting dynamic rate", "rate", currentRate)
 
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("🛑 Producer stopping. Sent %d messages\n", messageCount)
+			p.logger.Info("producer stopping (dynamic)", "messages", messageCount)
 			return ctx.Err()
 
 		case <-ticker.C:
@@ -142,13 +147,13 @@ func (p *Producer) startWithTrafficPatterns(ctx context.Context, schema *Schema)
 				currentRate = newRate
 				interval = time.Second / time.Duration(currentRate)
 				ticker.Reset(interval)
-				fmt.Printf("📊 Rate changed to: %d msg/sec (elapsed: %v)\n", currentRate, elapsed.Truncate(time.Second))
+				p.logger.Info("rate changed", "rate", currentRate, "elapsed", elapsed.Truncate(time.Second))
 				lastLoggedRate = currentRate
 			}
 
 			// Generate and send message
 			if err := p.sendMessage(ctx, schema.Name, messageCount); err != nil {
-				fmt.Printf("⚠️  Failed to send message: %v\n", err)
+				p.logger.Warn("failed send message", "err", err)
 				continue
 			}
 
@@ -180,7 +185,7 @@ func (p *Producer) startWithTrafficPatterns(ctx context.Context, schema *Schema)
 					ticker.Reset(interval)
 
 					if newRate != lastLoggedRate {
-						fmt.Printf("📊 Rate changed to: %d msg/sec (elapsed: %v)\n", currentRate, elapsed.Truncate(time.Second))
+						p.logger.Info("rate changed", "rate", currentRate, "elapsed", elapsed.Truncate(time.Second))
 						lastLoggedRate = currentRate
 					}
 				}
@@ -205,13 +210,13 @@ func (p *Producer) startWithConstantRate(ctx context.Context, schema *Schema) er
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("🛑 Producer stopping. Sent %d messages\n", messageCount)
+			p.logger.Info("producer stopping (constant)", "messages", messageCount)
 			return ctx.Err()
 
 		case <-ticker.C:
 			// Generate and send message
 			if err := p.sendMessage(ctx, schema.Name, messageCount); err != nil {
-				fmt.Printf("⚠️  Failed to send message: %v\n", err)
+				p.logger.Warn("failed send message", "err", err)
 				continue
 			}
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/pipeline"
 	itemplates "pipegen/internal/templates"
 )
@@ -18,6 +19,7 @@ type ExecutionReportGenerator struct {
 	outputDir    string
 	templatePath string
 	logoBase64   string
+	logger       logpkg.Logger
 }
 
 // NewExecutionReportGenerator creates a new execution report generator
@@ -38,6 +40,7 @@ func NewExecutionReportGenerator(outputDir string) (*ExecutionReportGenerator, e
 		outputDir:    outputDir,
 		templatePath: templatePath,
 		logoBase64:   logoBase64,
+		logger:       logpkg.Global(),
 	}, nil
 }
 
@@ -95,30 +98,30 @@ type ChartDataPoint = TimeSeriesPoint
 
 // GenerateReport creates an HTML execution report
 func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (string, error) {
-	fmt.Printf("[Report] Ensuring output directory exists: %s\n", g.outputDir)
+	g.logger.Debug("ensure report output directory", "dir", g.outputDir)
 	if err := os.MkdirAll(g.outputDir, 0755); err != nil {
-		fmt.Printf("[Report] ERROR: failed to create output directory: %v\n", err)
+		g.logger.Error("failed to create output directory", "error", err)
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	fmt.Printf("[Report] Loading template: %s\n", g.templatePath)
+	g.logger.Debug("loading report template", "path", g.templatePath)
 	tmplContent, err := os.ReadFile(g.templatePath)
 	if err != nil {
 		// Only fallback to embedded template if this is the default internal template path
 		defaultPath := filepath.Join("internal", "templates", "files", "execution_report.html")
 		if (g.templatePath == defaultPath || strings.HasSuffix(g.templatePath, "/internal/templates/files/execution_report.html")) && itemplates.ExecutionReportTemplate != "" {
-			fmt.Printf("[Report] WARN: failed to read default template from disk (%v); using embedded template fallback\n", err)
+			g.logger.Warn("failed to read default template; using embedded fallback", "error", err)
 			tmplContent = []byte(itemplates.ExecutionReportTemplate)
 		} else {
-			fmt.Printf("[Report] ERROR: failed to read template file: %v\n", err)
+			g.logger.Error("failed to read template file", "error", err)
 			return "", fmt.Errorf("failed to read template file: %w", err)
 		}
 	}
 
-	fmt.Printf("[Report] Parsing template\n")
+	g.logger.Debug("parsing report template")
 	tmpl, err := template.New("report").Parse(string(tmplContent))
 	if err != nil {
-		fmt.Printf("[Report] ERROR: failed to parse template: %v\n", err)
+		g.logger.Error("failed to parse template", "error", err)
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
@@ -147,24 +150,24 @@ func (g *ExecutionReportGenerator) GenerateReport(data *ExecutionReportData) (st
 	filename := fmt.Sprintf("pipegen-execution-report-%s.html", timestamp)
 	filePath := filepath.Join(g.outputDir, filename)
 
-	fmt.Printf("[Report] Creating output file: %s\n", filePath)
+	g.logger.Debug("creating report output file", "path", filePath)
 	file, err := os.Create(filePath)
 	if err != nil {
-		fmt.Printf("[Report] ERROR: failed to create output file: %v\n", err)
+		g.logger.Error("failed to create output file", "error", err)
 		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			fmt.Printf("failed to close file: %v\n", err)
+			g.logger.Warn("failed to close report file", "error", err)
 		}
 	}()
 
-	fmt.Printf("[Report] Executing template\n")
+	g.logger.Debug("executing report template")
 	if err := tmpl.Execute(file, data); err != nil {
-		fmt.Printf("[Report] ERROR: failed to execute template: %v\n", err)
+		g.logger.Error("failed to execute report template", "error", err)
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	fmt.Printf("[Report] Report successfully generated: %s\n", filePath)
+	g.logger.Info("execution report generated", "path", filePath)
 	return filePath, nil
 }

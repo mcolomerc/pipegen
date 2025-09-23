@@ -31,7 +31,9 @@ func TestCreateSessionWithRetry_SucceedsAfterRetries(t *testing.T) {
 
 	// Point FlinkURL such that port replacement produces the test server URL
 	// Replace 8081 with 8083 logic is used; mimic that shape
-	fd.config.FlinkURL = srv.URL // includes random port; logic will not replace 8081
+	fd.config.FlinkURL = srv.URL
+	fd.config.SQLGatewayURL = ""
+	fd.config.Normalize()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -56,6 +58,8 @@ func TestCreateSessionWithRetry_Fails(t *testing.T) {
 	}))
 	defer srv.Close()
 	fd.config.FlinkURL = srv.URL
+	fd.config.SQLGatewayURL = ""
+	fd.config.Normalize()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -85,6 +89,8 @@ func TestWaitForSQLGatewayReady(t *testing.T) {
 	}))
 	defer srv.Close()
 	fd.config.FlinkURL = srv.URL
+	fd.config.SQLGatewayURL = ""
+	fd.config.Normalize()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := fd.waitForSQLGatewayReady(ctx, srv.URL, 3*time.Second); err != nil {

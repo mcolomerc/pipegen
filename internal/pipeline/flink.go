@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/types"
 	"strings"
 	"time"
@@ -31,26 +32,64 @@ type FlinkDeployer struct {
 	sessionID      string
 	stopDeployment func(ctx context.Context, deploymentID string) error
 	globalMode     bool // New field to enable global table creation
+	logger         logpkg.Logger
+}
+
+// --- Typed response structs for Flink SQL Gateway ---
+type sessionCreateResponse struct {
+	SessionHandle string `json:"sessionHandle"`
+}
+
+type statementSubmitResponse struct {
+	OperationHandle string `json:"operationHandle"`
+}
+
+type operationStatusResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+// parseSessionID decodes the session creation response and returns the session handle
+func parseSessionID(body []byte) (string, error) {
+	var resp sessionCreateResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("unable to decode session response: %w", err)
+	}
+	if resp.SessionHandle == "" {
+		return "", fmt.Errorf("sessionHandle missing in response")
+	}
+	return resp.SessionHandle, nil
+}
+
+// parseStatementOperationHandle decodes the statement submission response
+func parseStatementOperationHandle(body []byte) (string, error) {
+	var resp statementSubmitResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("unable to decode statement response: %w", err)
+	}
+	if resp.OperationHandle == "" {
+		return "", fmt.Errorf("operationHandle missing in response")
+	}
+	return resp.OperationHandle, nil
+}
+
+// parseOperationStatus decodes the operation status response
+func parseOperationStatus(body []byte) (*operationStatusResponse, error) {
+	var resp operationStatusResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("unable to decode operation status: %w", err)
+	}
+	if resp.Status == "" { // status should always be present
+		return nil, fmt.Errorf("status missing in operation status response")
+	}
+	return &resp, nil
 }
 
 // getSQLGatewayURL resolves the SQL Gateway base URL. Preference order:
 // 1. Explicit Config.SQLGatewayURL if provided.
 // 2. Derive from FlinkURL by replacing :8081 with :8083 (common local convention).
 // 3. If no port substitution possible, append :8083 if missing.
-func (fd *FlinkDeployer) getSQLGatewayURL() string {
-	if fd.config.SQLGatewayURL != "" {
-		return fd.config.SQLGatewayURL
-	}
-	if strings.Contains(fd.config.FlinkURL, "8081") {
-		return strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
-	}
-	// If FlinkURL already ends with a port, just return as-is (assume correct)
-	if strings.Count(fd.config.FlinkURL, ":") >= 2 { // scheme://host:port
-		return fd.config.FlinkURL
-	}
-	// Append default gateway port
-	return strings.TrimRight(fd.config.FlinkURL, "/") + ":8083"
-}
+func (fd *FlinkDeployer) getSQLGatewayURL() string { return fd.config.SQLGatewayURL }
 
 // waitForSQLGatewayReady performs a lightweight readiness check by polling the sessions list endpoint.
 // It tolerates transient connection resets. Returns nil when it receives any HTTP 200 response.
@@ -71,18 +110,18 @@ func (fd *FlinkDeployer) waitForSQLGatewayReady(ctx context.Context, baseURL str
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			lastErr = err
-			fmt.Printf("[Flink SQL Gateway] (readiness) transient error: %v\n", err)
+			fd.logger.Warn("sql gateway readiness transient error", "error", err)
 			time.Sleep(750 * time.Millisecond)
 			continue
 		}
 		_, _ = io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode == 200 { // Ready
-			fmt.Printf("[Flink SQL Gateway] Readiness confirmed (HTTP 200)\n")
+			fd.logger.Info("sql gateway readiness confirmed")
 			return nil
 		}
 		lastErr = fmt.Errorf("status %d", resp.StatusCode)
-		fmt.Printf("[Flink SQL Gateway] (readiness) received status %d, retrying...\n", resp.StatusCode)
+		fd.logger.Debug("sql gateway readiness non-200", "status", resp.StatusCode)
 		time.Sleep(750 * time.Millisecond)
 	}
 	if lastErr == nil {
@@ -95,6 +134,7 @@ func (fd *FlinkDeployer) waitForSQLGatewayReady(ctx context.Context, baseURL str
 func NewFlinkDeployer(config *Config) *FlinkDeployer {
 	fd := &FlinkDeployer{
 		config: config,
+		logger: logpkg.Global(),
 	}
 	fd.stopDeployment = fd.defaultStopDeployment
 	return fd
@@ -105,6 +145,7 @@ func NewFlinkDeployerGlobal(config *Config) *FlinkDeployer {
 	fd := &FlinkDeployer{
 		config:     config,
 		globalMode: true,
+		logger:     logpkg.Global(),
 	}
 	fd.stopDeployment = fd.defaultStopDeployment
 	return fd
@@ -112,7 +153,7 @@ func NewFlinkDeployerGlobal(config *Config) *FlinkDeployer {
 
 // Deploy executes FlinkSQL statements in Confluent Cloud
 func (fd *FlinkDeployer) Deploy(ctx context.Context, statements []*types.SQLStatement, resources *Resources) ([]string, error) {
-	fmt.Printf("⚡ Deploying %d FlinkSQL statements...\n", len(statements))
+	fd.logger.Info("deploying flink sql statements", "count", len(statements), "mode", map[bool]string{true: "global", false: "session"}[fd.globalMode])
 
 	if fd.globalMode {
 		return fd.deployGlobal(ctx, statements, resources)
@@ -124,7 +165,7 @@ func (fd *FlinkDeployer) Deploy(ctx context.Context, statements []*types.SQLStat
 
 // deployGlobal uses a well-known global session for table creation
 func (fd *FlinkDeployer) deployGlobal(ctx context.Context, statements []*types.SQLStatement, resources *Resources) ([]string, error) {
-	fmt.Printf("🌍 Using global session approach for table deployment...\n")
+	fd.logger.Info("using global session approach")
 
 	// Use a well-known session name that can be reused across pipeline runs
 	globalSessionName := "pipegen-global-session"
@@ -136,12 +177,12 @@ func (fd *FlinkDeployer) deployGlobal(ctx context.Context, statements []*types.S
 	}
 
 	fd.sessionID = sessionID
-	fmt.Printf("📍 Using global session ID: %s\n", sessionID)
+	fd.logger.Info("using global session id", "session_id", sessionID)
 
 	var deploymentIDs []string
 
 	for i, stmt := range statements {
-		fmt.Printf("📝 Deploying statement %d globally: %s\n", i+1, stmt.Name)
+		fd.logger.Info("deploying statement globally", "index", i+1, "total", len(statements), "name", stmt.Name)
 
 		// Substitute variables in SQL statement
 		processedSQL := fd.substituteVariables(stmt.Content, resources)
@@ -153,13 +194,13 @@ func (fd *FlinkDeployer) deployGlobal(ctx context.Context, statements []*types.S
 		}
 
 		deploymentIDs = append(deploymentIDs, deploymentID)
-		fmt.Printf("  ✅ Deployed globally with ID: %s\n", deploymentID)
+		fd.logger.Info("statement deployed globally", "deployment_id", deploymentID, "name", stmt.Name)
 
 		// Small delay between statements to avoid overwhelming the API
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	fmt.Printf("🎉 All %d statements deployed successfully in global session!\n", len(statements))
+	fd.logger.Info("all statements deployed in global session", "count", len(statements))
 	return deploymentIDs, nil
 }
 
@@ -172,7 +213,7 @@ func (fd *FlinkDeployer) deploySessionBased(ctx context.Context, statements []*t
 	gwURL := fd.getSQLGatewayURL()
 	readinessCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	if err := fd.waitForSQLGatewayReady(readinessCtx, gwURL, 8*time.Second); err != nil {
-		fmt.Printf("[Flink SQL Gateway] Readiness wait did not confirm availability: %v (continuing with session retry)\n", err)
+		fd.logger.Warn("gateway readiness not confirmed; continuing", "error", err)
 	}
 	cancel()
 
@@ -183,7 +224,7 @@ func (fd *FlinkDeployer) deploySessionBased(ctx context.Context, statements []*t
 	fd.sessionID = sessID
 
 	for i, stmt := range statements {
-		fmt.Printf("📝 Deploying statement %d: %s\n", i+1, stmt.Name)
+		fd.logger.Info("deploying statement", "index", i+1, "total", len(statements), "name", stmt.Name)
 
 		// Substitute variables in SQL statement
 		processedSQL := fd.substituteVariables(stmt.Content, resources)
@@ -195,19 +236,19 @@ func (fd *FlinkDeployer) deploySessionBased(ctx context.Context, statements []*t
 		}
 
 		deploymentIDs = append(deploymentIDs, deploymentID)
-		fmt.Printf("  ✅ Deployed with ID: %s\n", deploymentID)
+		fd.logger.Info("statement deployed", "deployment_id", deploymentID, "name", stmt.Name)
 
 		// Small delay between statements to avoid overwhelming the API
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	fmt.Printf("🎉 All %d statements deployed successfully!\n", len(statements))
+	fd.logger.Info("all statements deployed successfully", "count", len(statements))
 	return deploymentIDs, nil
 }
 
 // getOrCreateGlobalSession gets an existing global session or creates a new one
 func (fd *FlinkDeployer) getOrCreateGlobalSession(ctx context.Context, sessionName string) (string, error) {
-	sqlGatewayURL := strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
+	sqlGatewayURL := fd.getSQLGatewayURL()
 
 	// First, try to list existing sessions to see if our global session exists
 	listSessionsEndpoint := fmt.Sprintf("%s/v1/sessions", sqlGatewayURL)
@@ -222,25 +263,25 @@ func (fd *FlinkDeployer) getOrCreateGlobalSession(ctx context.Context, sessionNa
 	}
 	defer func() {
 		if err := listResp.Body.Close(); err != nil {
-			fmt.Printf("failed to close list response body: %v\n", err)
+			fd.logger.Warn("failed to close list response body", "error", err)
 		}
 	}()
 
 	if listResp.StatusCode == 200 {
 		listBody, err := io.ReadAll(listResp.Body)
 		if err == nil {
-			fmt.Printf("[Flink SQL Gateway] Current sessions: %s\n", string(listBody))
+			fd.logger.Debug("current sessions", "body", string(listBody))
 
 			// Try to find existing global session
 			if existingSessionID := extractExistingSessionID(string(listBody), sessionName); existingSessionID != "" {
-				fmt.Printf("🔄 Reusing existing global session: %s\n", existingSessionID)
+				fd.logger.Info("reusing existing global session", "session_id", existingSessionID)
 				return existingSessionID, nil
 			}
 		}
 	}
 
 	// Create new global session
-	fmt.Printf("🆕 Creating new global session: %s\n", sessionName)
+	fd.logger.Info("creating new global session", "name", sessionName)
 	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", sqlGatewayURL)
 	sessionReqBody := fmt.Sprintf(`{"sessionName": "%s", "properties": {}}`, sessionName)
 	sessionReq, err := http.NewRequestWithContext(ctx, "POST", sessionEndpoint, strings.NewReader(sessionReqBody))
@@ -250,30 +291,30 @@ func (fd *FlinkDeployer) getOrCreateGlobalSession(ctx context.Context, sessionNa
 	sessionReq.Header.Set("Content-Type", "application/json")
 	sessionResp, err := http.DefaultClient.Do(sessionReq)
 	if err != nil {
-		fmt.Printf("[Flink SQL Gateway] Global session creation request failed: %v\n", err)
+		fd.logger.Error("global session creation request failed", "error", err)
 		return "", fmt.Errorf("failed to create global session: %w", err)
 	}
 	defer func() {
 		if err := sessionResp.Body.Close(); err != nil {
-			fmt.Printf("failed to close session response body: %v\n", err)
+			fd.logger.Warn("failed to close session response body", "error", err)
 		}
 	}()
 
 	sessionBody, err := io.ReadAll(sessionResp.Body)
 	if err != nil {
-		fmt.Printf("[Flink SQL Gateway] Failed to read global session response: %v\n", err)
+		fd.logger.Error("failed to read global session response", "error", err)
 		return "", fmt.Errorf("failed to read global session response: %w", err)
 	}
-	fmt.Printf("[Flink SQL Gateway] Global session creation response: %s\n", string(sessionBody))
+	fd.logger.Debug("global session creation response", "body", string(sessionBody))
 	if sessionResp.StatusCode != 200 {
-		fmt.Printf("[Flink SQL Gateway] Global session creation failed with status %d: %s\n", sessionResp.StatusCode, string(sessionBody))
+		fd.logger.Error("global session creation failed", "status", sessionResp.StatusCode, "body", string(sessionBody))
 		return "", fmt.Errorf("flink SQL Gateway global session creation failed: %s", string(sessionBody))
 	}
 
-	sessionID := extractSessionID(string(sessionBody))
-	if sessionID == "" {
-		fmt.Printf("[Flink SQL Gateway] Could not extract session ID from global session response: %s\n", string(sessionBody))
-		return "", fmt.Errorf("could not extract session ID from global session response: %s", string(sessionBody))
+	sessionID, perr := parseSessionID(sessionBody)
+	if perr != nil {
+		fd.logger.Error("could not parse session id from global session response", "error", perr, "body", string(sessionBody))
+		return "", fmt.Errorf("could not parse session ID from global session response: %w", perr)
 	}
 
 	return sessionID, nil
@@ -292,12 +333,12 @@ type StatusCallback func(statementName, status, phase, deploymentID, errorMsg st
 
 // DeployWithStatusTracking executes FlinkSQL statements with status tracking
 func (fd *FlinkDeployer) DeployWithStatusTracking(ctx context.Context, statements []*types.SQLStatement, resources *Resources, statusCallback StatusCallback) ([]string, error) {
-	fmt.Printf("⚡ Deploying %d FlinkSQL statements with status tracking...\n", len(statements))
+	fd.logger.Info("deploying flink sql statements with status tracking", "count", len(statements))
 
 	var deploymentIDs []string
 
 	for i, stmt := range statements {
-		fmt.Printf("📝 Deploying statement %d: %s\n", i+1, stmt.Name)
+		fd.logger.Info("deploying statement", "index", i+1, "total", len(statements), "name", stmt.Name)
 
 		// Update status to deploying
 		if statusCallback != nil {
@@ -318,7 +359,7 @@ func (fd *FlinkDeployer) DeployWithStatusTracking(ctx context.Context, statement
 		}
 
 		deploymentIDs = append(deploymentIDs, deploymentID)
-		fmt.Printf("  ✅ Deployed with ID: %s\n", deploymentID)
+		fd.logger.Info("statement deployed", "deployment_id", deploymentID, "name", stmt.Name)
 
 		// Update status to running
 		if statusCallback != nil {
@@ -326,7 +367,7 @@ func (fd *FlinkDeployer) DeployWithStatusTracking(ctx context.Context, statement
 		}
 	}
 
-	fmt.Printf("✅ All %d statements deployed successfully\n", len(statements))
+	fd.logger.Info("all statements deployed successfully", "count", len(statements))
 	return deploymentIDs, nil
 }
 
@@ -336,13 +377,13 @@ func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) 
 	if fd.globalMode {
 		mode = "global"
 	}
-	fmt.Printf("    🚀 Deploying SQL statement '%s' to Flink SQL Gateway API (%s workflow)...\n", name, mode)
+	fd.logger.Info("deploying statement", "name", name, "mode", mode)
 
 	// 2. Submit statement to session (reuse sessionID)
 	if fd.sessionID == "" {
 		return "", fmt.Errorf("no sessionID available for statement deployment")
 	}
-	sqlGatewayURL := strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
+	sqlGatewayURL := fd.getSQLGatewayURL()
 	statementEndpoint := fmt.Sprintf("%s/v1/sessions/%s/statements", sqlGatewayURL, fd.sessionID)
 	statementReqBody := fmt.Sprintf(`{"statement": "%s"}`, escapeJSONString(sql))
 	statementReq, err := http.NewRequestWithContext(ctx, "POST", statementEndpoint, strings.NewReader(statementReqBody))
@@ -356,7 +397,7 @@ func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) 
 	}
 	defer func() {
 		if err := statementResp.Body.Close(); err != nil {
-			fmt.Printf("failed to close statementResp.Body: %v\n", err)
+			fd.logger.Warn("failed to close statement response body", "error", err)
 		}
 	}()
 	statementBody, err := io.ReadAll(statementResp.Body)
@@ -364,13 +405,13 @@ func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) 
 		return "", fmt.Errorf("failed to read statement response: %w", err)
 	}
 	if statementResp.StatusCode != 200 {
-		fmt.Printf("⚠️  Statement submission failed with status %d: %s\n", statementResp.StatusCode, string(statementBody))
+		fd.logger.Error("statement submission failed", "status", statementResp.StatusCode, "body", string(statementBody))
 		return "", fmt.Errorf("flink SQL Gateway returned status %d: %s", statementResp.StatusCode, string(statementBody))
 	}
 
-	operationHandle := extractOperationHandle(string(statementBody))
-	if operationHandle == "" {
-		return "", fmt.Errorf("could not extract operationHandle from response: %s", string(statementBody))
+	operationHandle, err := parseStatementOperationHandle(statementBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse statement submit response: %w", err)
 	}
 
 	// 3. Poll operation status until finished
@@ -380,91 +421,56 @@ func (fd *FlinkDeployer) deployStatement(ctx context.Context, name, sql string) 
 	for i := 0; i < 30; i++ { // up to 30 attempts, 1s apart
 		select {
 		case <-ctx.Done():
-			fmt.Printf("[Flink SQL Gateway] Context cancelled while waiting for operation status for '%s'\n", name)
+			fd.logger.Error("context cancelled while waiting for operation status", "name", name)
 			return "", fmt.Errorf("context cancelled while waiting for operation status")
 		default:
 		}
 		req, err := http.NewRequestWithContext(ctx, "GET", opStatusEndpoint, nil)
 		if err != nil {
-			fmt.Printf("[Flink SQL Gateway] Failed to create operation status request for '%s': %v\n", name, err)
+			fd.logger.Error("create op status request failed", "name", name, "err", err)
 			return "", fmt.Errorf("failed to create operation status request: %w", err)
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			fmt.Printf("[Flink SQL Gateway] Failed to poll operation status for '%s': %v\n", name, err)
+			fd.logger.Warn("poll operation status error", "name", name, "err", err)
 			return "", fmt.Errorf("failed to poll operation status: %w", err)
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close resp.Body: %v\n", err)
+			fd.logger.Warn("failed to close operation status body", "error", err)
 		}
 		if err != nil {
-			fmt.Printf("⚠️  Failed to read operation status response for '%s': %v\n", name, err)
+			fd.logger.Warn("failed to read operation status response", "name", name, "error", err)
 			return "", fmt.Errorf("failed to read operation status response: %w", err)
 		}
-		opStatus = extractOperationStatus(string(body))
-		opError = extractOperationError(string(body))
+		statusResp, perr := parseOperationStatus(body)
+		if perr != nil {
+			fd.logger.Error("parse op status failed", "name", name, "err", perr, "body", string(body))
+			return "", perr
+		}
+		opStatus = statusResp.Status
+		opError = statusResp.Error
 		if opStatus == "FINISHED" {
-			fmt.Printf("    ✅ SQL statement '%s' executed successfully.\n", name)
+			fd.logger.Info("sql statement executed", "name", name)
 			return name, nil
 		}
 		if opStatus == "ERROR" || opError != "" {
 			// Attempt to retrieve detailed error via helper (handles /result/0 fallback)
 			if details, derr := fd.fetchOperationResult(ctx, sqlGatewayURL, operationHandle); derr == nil && details != "" {
-				fmt.Printf("⚠️  Error details from result endpoint: %s\n", details)
+				fd.logger.Error("statement error details", "name", name, "details", details)
 			} else if derr != nil {
-				fmt.Printf("⚠️  Result detail retrieval failed: %v\n", derr)
+				fd.logger.Warn("result detail retrieval failed", "name", name, "error", derr)
 			}
-			fmt.Printf("⚠️  ERROR deploying statement '%s': %s\n", name, opError)
+			fd.logger.Error("statement execution error", "name", name, "error", opError)
 			return "", fmt.Errorf("SQL statement '%s' failed: %s", name, opError)
 		}
 		time.Sleep(1 * time.Second)
 	}
-	fmt.Printf("[Flink SQL Gateway] Statement '%s' did not finish after polling. Last status: %s, error: %s\n", name, opStatus, opError)
+	fd.logger.Error("statement did not finish after polling", "name", name, "status", opStatus, "error", opError)
 	return "", fmt.Errorf("SQL statement '%s' did not finish after polling. Last status: %s, error: %s", name, opStatus, opError)
 }
 
-// extractOperationHandle parses the operationHandle from the statement response
-func extractOperationHandle(resp string) string {
-	idx := strings.Index(resp, "\"operationHandle\":\"")
-	if idx == -1 {
-		return ""
-	}
-	start := idx + len("\"operationHandle\":\"")
-	end := strings.Index(resp[start:], "\"")
-	if end == -1 {
-		return ""
-	}
-	return resp[start : start+end]
-}
-
-// extractOperationStatus parses the status from the operation status response
-func extractOperationStatus(resp string) string {
-	idx := strings.Index(resp, "\"status\":\"")
-	if idx == -1 {
-		return ""
-	}
-	start := idx + len("\"status\":\"")
-	end := strings.Index(resp[start:], "\"")
-	if end == -1 {
-		return ""
-	}
-	return resp[start : start+end]
-}
-
-// extractOperationError parses the error from the operation status response
-func extractOperationError(resp string) string {
-	idx := strings.Index(resp, "\"error\":\"")
-	if idx == -1 {
-		return ""
-	}
-	start := idx + len("\"error\":\"")
-	end := strings.Index(resp[start:], "\"")
-	if end == -1 {
-		return ""
-	}
-	return resp[start : start+end]
-}
+// (Removed legacy substring-based extractOperation* helpers in favor of typed JSON parsing)
 
 // fetchOperationResult attempts to retrieve the operation result (for error details)
 // It first tries the 0-based result endpoint introduced in newer Flink Gateway APIs:
@@ -496,7 +502,7 @@ func (fd *FlinkDeployer) fetchOperationResult(ctx context.Context, baseURL, oper
 			}
 			body, rerr := io.ReadAll(resp.Body)
 			if cerr := resp.Body.Close(); cerr != nil {
-				fmt.Printf("failed to close result body: %v\n", cerr)
+				fd.logger.Warn("failed to close result body", "error", cerr)
 			}
 			if rerr != nil {
 				lastErr = rerr
@@ -520,30 +526,7 @@ func (fd *FlinkDeployer) fetchOperationResult(ctx context.Context, baseURL, oper
 	return "", fmt.Errorf("no result body available")
 }
 
-// extractSessionID parses the session id from the session creation response
-func extractSessionID(resp string) string {
-	// Updated extraction: look for "sessionHandle":"..."
-	// Prefer JSON parsing (resilient to spacing / ordering)
-	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(resp), &parsed); err == nil {
-		if v, ok := parsed["sessionHandle"]; ok {
-			if s, ok := v.(string); ok {
-				return s
-			}
-		}
-	}
-	// Fallback to substring search
-	idx := strings.Index(resp, "\"sessionHandle\":\"")
-	if idx == -1 {
-		return ""
-	}
-	start := idx + len("\"sessionHandle\":\"")
-	end := strings.Index(resp[start:], "\"")
-	if end == -1 {
-		return ""
-	}
-	return resp[start : start+end]
-}
+// (Removed legacy extractSessionID; replaced with parseSessionID using typed struct)
 
 // escapeJSONString escapes quotes and newlines for JSON string
 func escapeJSONString(s string) string {
@@ -562,7 +545,7 @@ func (fd *FlinkDeployer) createSessionWithRetry(ctx context.Context, sessionName
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}
-	sqlGatewayURL := strings.Replace(fd.config.FlinkURL, "8081", "8083", 1)
+	sqlGatewayURL := fd.getSQLGatewayURL()
 	sessionEndpoint := fmt.Sprintf("%s/v1/sessions", sqlGatewayURL)
 	payload := fmt.Sprintf(`{"sessionName": "%s", "properties": {}}`, sessionName)
 
@@ -584,36 +567,36 @@ func (fd *FlinkDeployer) createSessionWithRetry(ctx context.Context, sessionName
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("session creation attempt %d/%d failed: %w", attempt, maxAttempts, err)
-			fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			fd.logger.Warn("session creation attempt failed", "attempt", attempt, "max", maxAttempts, "error", err)
 		} else {
 			body, rerr := io.ReadAll(resp.Body)
 			if cerr := resp.Body.Close(); cerr != nil {
-				fmt.Printf("failed to close session body: %v\n", cerr)
+				fd.logger.Warn("failed to close session body", "error", cerr)
 			}
 			if rerr != nil {
 				lastErr = fmt.Errorf("failed reading session response (attempt %d): %w", attempt, rerr)
-				fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+				fd.logger.Warn("failed reading session response", "attempt", attempt, "error", rerr)
 			} else if resp.StatusCode == 200 {
-				id := extractSessionID(string(body))
-				if id != "" {
+				id, perr := parseSessionID(body)
+				if perr == nil {
 					if attempt > 1 {
-						fmt.Printf("[Flink SQL Gateway] ✅ Session created after %d attempts. ID=%s\n", attempt, id)
+						fd.logger.Info("session created after attempts", "attempts", attempt, "session_id", id)
 					} else {
-						fmt.Printf("[Flink SQL Gateway] ✅ Session created. ID=%s\n", id)
+						fd.logger.Info("session created", "session_id", id)
 					}
 					return id, nil
 				}
-				lastErr = fmt.Errorf("attempt %d: session ID missing in response: %s", attempt, string(body))
-				fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+				lastErr = fmt.Errorf("attempt %d: session parse failure: %v body=%s", attempt, perr, string(body))
+				fd.logger.Warn("session parse failure", "attempt", attempt, "error", perr, "body", string(body))
 			} else {
 				lastErr = fmt.Errorf("attempt %d: non-200 status %d: %s", attempt, resp.StatusCode, string(body))
-				fmt.Printf("[Flink SQL Gateway] ⚠️  %v\n", lastErr)
+				fd.logger.Warn("non-200 session create status", "attempt", attempt, "status", resp.StatusCode, "body", string(body))
 			}
 		}
 
 		// Backoff before next attempt if not last
 		if attempt < maxAttempts {
-			fmt.Printf("[Flink SQL Gateway] ⏳ Retrying session creation in %s (attempt %d/%d)\n", backoff, attempt, maxAttempts)
+			fd.logger.Info("retrying session creation", "next_backoff", backoff.String(), "attempt", attempt, "max", maxAttempts)
 			timer := time.NewTimer(backoff)
 			select {
 			case <-ctx.Done():
@@ -670,22 +653,22 @@ func (fd *FlinkDeployer) truncateSQL(sql string) string {
 
 // Cleanup stops and removes FlinkSQL deployments
 func (fd *FlinkDeployer) Cleanup(ctx context.Context, deploymentIDs []string) error {
-	fmt.Printf("🧹 Cleaning up %d FlinkSQL deployments...\n", len(deploymentIDs))
+	fd.logger.Info("cleaning up flink deployments", "count", len(deploymentIDs))
 
 	for _, deploymentID := range deploymentIDs {
 		if err := fd.stopDeployment(ctx, deploymentID); err != nil {
 			return fmt.Errorf("failed to stop deployment %s: %w", deploymentID, err)
 		}
-		fmt.Printf("  ✅ Stopped deployment: %s\n", deploymentID)
+		fd.logger.Info("stopped deployment", "deployment_id", deploymentID)
 	}
 
-	fmt.Printf("✅ All deployments cleaned up\n")
+	fd.logger.Info("all deployments cleaned up")
 	return nil
 }
 
 // defaultStopDeployment is the actual implementation
 func (fd *FlinkDeployer) defaultStopDeployment(ctx context.Context, deploymentID string) error {
-	fmt.Printf("    🛑 Stopping deployment: %s\n", deploymentID)
+	fd.logger.Info("stopping deployment", "deployment_id", deploymentID)
 
 	// Create a new context with timeout for cleanup operations to avoid cancellation issues
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -696,19 +679,19 @@ func (fd *FlinkDeployer) defaultStopDeployment(ctx context.Context, deploymentID
 	jobsEndpoint := fmt.Sprintf("%s/jobs", fd.config.FlinkURL)
 	jobsResp, err := http.Get(jobsEndpoint)
 	if err != nil {
-		fmt.Printf("    ⚠️  Warning: Failed to get job list for cleanup: %v\n", err)
+		fd.logger.Warn("failed to get job list for cleanup", "error", err)
 		return nil // Don't fail completely, just warn
 	}
 	defer func() { _ = jobsResp.Body.Close() }()
 
 	if jobsResp.StatusCode != http.StatusOK {
-		fmt.Printf("    ⚠️  Warning: Failed to get job list, status: %d\n", jobsResp.StatusCode)
+		fd.logger.Warn("failed to get job list", "status", jobsResp.StatusCode)
 		return nil
 	}
 
 	jobsBody, err := io.ReadAll(jobsResp.Body)
 	if err != nil {
-		fmt.Printf("    ⚠️  Warning: Failed to read jobs response: %v\n", err)
+		fd.logger.Warn("failed to read jobs response", "error", err)
 		return nil
 	}
 
@@ -720,7 +703,7 @@ func (fd *FlinkDeployer) defaultStopDeployment(ctx context.Context, deploymentID
 	}
 
 	if err := json.Unmarshal(jobsBody, &jobsResponse); err != nil {
-		fmt.Printf("    ⚠️  Warning: Failed to parse jobs response: %v\n", err)
+		fd.logger.Warn("failed to parse jobs response", "error", err)
 		return nil
 	}
 
@@ -733,29 +716,29 @@ func (fd *FlinkDeployer) defaultStopDeployment(ctx context.Context, deploymentID
 			cancelReq, err := http.NewRequestWithContext(cleanupCtx, "PATCH",
 				jobCancelEndpoint, nil)
 			if err != nil {
-				fmt.Printf("    ⚠️  Warning: Failed to create cancel request for job %s: %v\n", job.ID, err)
+				fd.logger.Warn("failed to create cancel request", "job_id", job.ID, "error", err)
 				continue
 			}
 
 			cancelResp, err := http.DefaultClient.Do(cancelReq)
 			if err != nil {
-				fmt.Printf("    ⚠️  Warning: Failed to cancel job %s: %v\n", job.ID, err)
+				fd.logger.Warn("failed to cancel job", "job_id", job.ID, "error", err)
 				continue
 			}
 			_ = cancelResp.Body.Close()
 
 			if cancelResp.StatusCode == http.StatusAccepted {
 				cancelledJobs = append(cancelledJobs, job.ID)
-				fmt.Printf("    ✅ Cancelled job with ID: %s\n", job.ID)
+				fd.logger.Info("cancelled job", "job_id", job.ID)
 			} else {
-				fmt.Printf("    ⚠️  Warning: Failed to cancel job %s, status: %d\n", job.ID, cancelResp.StatusCode)
+				fd.logger.Warn("failed to cancel job", "job_id", job.ID, "status", cancelResp.StatusCode)
 			}
 		}
 	}
 
 	// Wait a moment for jobs to be cancelled
 	if len(cancelledJobs) > 0 {
-		fmt.Printf("    ⏳ Waiting for %d job(s) to be cancelled...\n", len(cancelledJobs))
+		fd.logger.Info("waiting for jobs to cancel", "count", len(cancelledJobs))
 		time.Sleep(2 * time.Second)
 	}
 
@@ -810,7 +793,8 @@ func (client *FlinkAPIClient) GetStatementStatus(ctx context.Context, statementI
 
 // CancelAllRunningJobs cancels all currently running Flink jobs
 func CancelAllRunningJobs(ctx context.Context, flinkURL string) error {
-	fmt.Println("🧹 Cancelling all running Flink jobs...")
+	logger := logpkg.Global()
+	logger.Info("cancelling all running flink jobs")
 
 	// Create a new context with timeout for cleanup operations to avoid cancellation issues
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -852,32 +836,32 @@ func CancelAllRunningJobs(ctx context.Context, flinkURL string) error {
 			cancelReq, err := http.NewRequestWithContext(cleanupCtx, "PATCH",
 				jobCancelEndpoint, nil)
 			if err != nil {
-				fmt.Printf("  ⚠️  Warning: Failed to create cancel request for job %s: %v\n", job.ID, err)
+				logger.Warn("failed to create cancel request", "job_id", job.ID, "error", err)
 				continue
 			}
 
 			cancelResp, err := http.DefaultClient.Do(cancelReq)
 			if err != nil {
-				fmt.Printf("  ⚠️  Warning: Failed to cancel job %s: %v\n", job.ID, err)
+				logger.Warn("failed to cancel job", "job_id", job.ID, "error", err)
 				continue
 			}
 			_ = cancelResp.Body.Close()
 
 			if cancelResp.StatusCode == http.StatusAccepted {
 				cancelledCount++
-				fmt.Printf("  ✅ Cancelled job with ID: %s\n", job.ID)
+				logger.Info("cancelled job", "job_id", job.ID)
 			} else {
-				fmt.Printf("  ⚠️  Warning: Failed to cancel job %s, status: %d\n", job.ID, cancelResp.StatusCode)
+				logger.Warn("failed to cancel job", "job_id", job.ID, "status", cancelResp.StatusCode)
 			}
 		}
 	}
 
 	if cancelledCount > 0 {
-		fmt.Printf("⏳ Waiting for %d job(s) to be cancelled...\n", cancelledCount)
+		logger.Info("waiting for jobs to cancel", "count", cancelledCount)
 		time.Sleep(3 * time.Second)
-		fmt.Printf("✅ Cancelled %d Flink jobs\n", cancelledCount)
+		logger.Info("cancelled flink jobs", "count", cancelledCount)
 	} else {
-		fmt.Println("ℹ️  No running jobs found to cancel")
+		logger.Info("no running jobs to cancel")
 	}
 
 	return nil

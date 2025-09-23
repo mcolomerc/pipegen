@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/pipeline"
 	"pipegen/internal/templates"
 	"pipegen/internal/version"
@@ -27,6 +28,7 @@ type ProjectGenerator struct {
 	InputSchemaContent string
 	InputCSVPath       string
 	templateManager    *templates.Manager
+	logger             logpkg.Logger
 }
 
 // sanitizeAVROIdentifier converts a string to a valid AVRO identifier
@@ -61,6 +63,7 @@ func NewProjectGenerator(name, path string, localMode bool) (*ProjectGenerator, 
 		ProjectPath:     path,
 		LocalMode:       localMode,
 		templateManager: templateManager,
+		logger:          logpkg.Global(),
 	}, nil
 }
 
@@ -101,7 +104,7 @@ func (g *ProjectGenerator) Generate() error {
 	if g.InputSchemaPath != "" || strings.TrimSpace(g.InputSchemaContent) != "" {
 		if err := g.generateSourceTableFromSchema(); err != nil {
 			// Don't fail the whole generation on DDL synthesis issues; warn instead
-			fmt.Printf("⚠️  Failed to generate source table from schema: %v\n", err)
+			g.logger.Warn("failed to generate source table from schema", "error", err)
 		}
 	}
 
@@ -143,7 +146,7 @@ func (g *ProjectGenerator) generateSQLStatements() error {
 	// If CSV path provided, synthesize a filesystem source table (override default 01_create_source_table.sql)
 	if g.InputCSVPath != "" {
 		if err := g.generateCSVSourceTable(sqlDir); err != nil {
-			fmt.Printf("⚠️  Failed to generate CSV source table: %v\n", err)
+			g.logger.Warn("failed to generate csv source table", "error", err)
 		}
 	}
 
@@ -199,12 +202,12 @@ CREATE TABLE %s (
 	if err := os.WriteFile(filePath, []byte(ddl), 0644); err != nil {
 		return fmt.Errorf("write csv source table: %w", err)
 	}
-	fmt.Printf("🧩 Generated CSV filesystem source table DDL at %s\n", filePath)
+	g.logger.Info("generated csv filesystem source table ddl", "path", filePath)
 
 	// Create data directory and copy CSV file for Docker access
 	if err := g.setupCSVDataDirectory(csvFileName); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to setup data directory: %v\n", err)
-		fmt.Printf("💡 Manual step: Copy your CSV file to ./data/%s before running\n", csvFileName)
+		g.logger.Warn("failed to setup data directory", "error", err)
+		g.logger.Info("manual step required: copy csv file", "file", csvFileName)
 	}
 
 	return nil
@@ -224,7 +227,7 @@ func (g *ProjectGenerator) setupCSVDataDirectory(csvFileName string) error {
 	}
 	defer func() {
 		if closeErr := srcFile.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close source file: %v\n", closeErr)
+			g.logger.Warn("failed to close source file", "error", closeErr)
 		}
 	}()
 
@@ -235,7 +238,7 @@ func (g *ProjectGenerator) setupCSVDataDirectory(csvFileName string) error {
 	}
 	defer func() {
 		if closeErr := dstFile.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close destination file: %v\n", closeErr)
+			g.logger.Warn("failed to close destination file", "error", closeErr)
 		}
 	}()
 
@@ -243,7 +246,7 @@ func (g *ProjectGenerator) setupCSVDataDirectory(csvFileName string) error {
 		return fmt.Errorf("copy CSV file: %w", err)
 	}
 
-	fmt.Printf("📁 Copied CSV file to ./data/%s for Docker access\n", csvFileName)
+	g.logger.Info("copied csv file for docker access", "file", csvFileName)
 	return nil
 }
 
@@ -302,7 +305,7 @@ func (g *ProjectGenerator) copyInputSchema(schemasDir string) error {
 		return fmt.Errorf("failed to copy schema file: %w", err)
 	}
 
-	fmt.Printf("📋 Using provided input schema: %s\n", g.InputSchemaPath)
+	g.logger.Info("using provided input schema", "path", g.InputSchemaPath)
 	return nil
 }
 
@@ -312,7 +315,7 @@ func (g *ProjectGenerator) writeInputSchemaContent(schemasDir string, content st
 	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write input schema content: %w", err)
 	}
-	fmt.Printf("📋 Wrote provided input schema content to %s\n", outputPath)
+	g.logger.Info("wrote provided input schema content", "path", outputPath)
 	return nil
 }
 
@@ -456,7 +459,7 @@ func (g *ProjectGenerator) generateSchemaFromCSV(schemasDir string) error {
 		return fmt.Errorf("write inferred schema: %w", err)
 	}
 
-	fmt.Printf("🧪 Inferred AVRO schema from CSV (%d columns) -> %s\n", len(cols), outputPath)
+	g.logger.Info("inferred avro schema from csv", "columns", len(cols), "path", outputPath)
 	return nil
 }
 
@@ -519,7 +522,7 @@ CREATE TABLE %s (
 		return fmt.Errorf("failed to write source table DDL: %w", err)
 	}
 
-	fmt.Printf("🧩 Generated source table DDL at %s\n", target)
+	g.logger.Info("generated source table ddl", "path", target)
 	return nil
 }
 
@@ -728,15 +731,15 @@ func (g *ProjectGenerator) generateConnectors() error {
 		fmt.Sprintf("%s/org/apache/flink/flink-csv/%s/flink-csv-%s.jar", base, flinkFormat, flinkFormat),
 	}
 
-	fmt.Printf("📥 Downloading %d Flink connectors (generated from version constants)...\n", len(urls))
+	g.logger.Info("downloading flink connectors", "count", len(urls))
 	for i, connectorURL := range urls {
 		if err := g.downloadConnector(connectorsDir, connectorURL, i+1, len(urls)); err != nil {
-			fmt.Printf("⚠️  Failed to download connector %d/%d: %v\n", i+1, len(urls), err)
+			g.logger.Warn("failed to download connector", "index", i+1, "total", len(urls), "error", err)
 			continue
 		}
 	}
 
-	fmt.Println("✅ Connector downloads completed")
+	g.logger.Info("connector downloads completed")
 	return nil
 }
 
@@ -761,12 +764,12 @@ func (g *ProjectGenerator) downloadConnector(connectorsDir, connectorURL string,
 
 	// Check if file already exists
 	if _, err := os.Stat(targetPath); err == nil {
-		fmt.Printf("  📦 %d/%d: %s (already exists)\n", current, total, filename)
+		g.logger.Debug("connector already exists", "index", current, "total", total, "file", filename)
 		return nil
 	}
 
 	// Download the file
-	fmt.Printf("  📥 %d/%d: %s\n", current, total, filename)
+	g.logger.Debug("downloading connector", "index", current, "total", total, "file", filename)
 
 	resp, err := http.Get(connectorURL)
 	if err != nil {
@@ -774,7 +777,7 @@ func (g *ProjectGenerator) downloadConnector(connectorsDir, connectorURL string,
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			g.logger.Warn("failed to close connector response body", "error", err)
 		}
 	}()
 
@@ -789,7 +792,7 @@ func (g *ProjectGenerator) downloadConnector(connectorsDir, connectorURL string,
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			fmt.Printf("failed to close file: %v\n", err)
+			g.logger.Warn("failed to close file", "error", err)
 		}
 	}()
 

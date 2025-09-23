@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	logpkg "pipegen/internal/log"
 )
 
 // Alternative monitoring approaches when Flink REST API metrics are unreliable
@@ -18,6 +20,7 @@ type AlternativeMonitor struct {
 	config        *Config
 	kafkaBrokers  string
 	containerName string
+	logger        logpkg.Logger
 }
 
 func NewAlternativeMonitor(config *Config) *AlternativeMonitor {
@@ -25,6 +28,7 @@ func NewAlternativeMonitor(config *Config) *AlternativeMonitor {
 		config:        config,
 		kafkaBrokers:  "broker:29092", // Default internal broker address
 		containerName: "broker",       // Default Kafka container name
+		logger:        logpkg.Global(),
 	}
 }
 
@@ -41,22 +45,32 @@ type MonitoringResult struct {
 
 // WaitForFlinkProcessingAlternative uses multiple monitoring approaches
 func (am *AlternativeMonitor) WaitForFlinkProcessingAlternative(ctx context.Context, consumerGroups []string) error {
-	fmt.Println("⏳ Using enhanced monitoring to detect Flink record processing...")
+	if am.logger != nil {
+		am.logger.Info("using enhanced monitoring")
+	}
 
 	maxAttempts := 15
 	checkInterval := 3 * time.Second
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		fmt.Printf("📊 Enhanced monitoring check (attempt %d/%d)...\n", attempt, maxAttempts)
+		if am.logger != nil {
+			am.logger.Info("monitoring check", "attempt", attempt, "max", maxAttempts)
+		}
 
 		result, err := am.checkProcessingActivity(consumerGroups)
 		if err != nil {
-			fmt.Printf("⚠️  Monitoring error: %v\n", err)
+			if am.logger != nil {
+				am.logger.Warn("monitoring error", "err", err)
+			}
 		} else if result.ProcessingDetected {
-			fmt.Printf("✅ %s\n", result.Details)
+			if am.logger != nil {
+				am.logger.Info("processing detected", "details", result.Details)
+			}
 			return nil
 		} else {
-			fmt.Printf("⏳ No processing detected yet. %s\n", result.Details)
+			if am.logger != nil {
+				am.logger.Debug("no processing yet", "details", result.Details)
+			}
 		}
 
 		// Wait before next attempt
@@ -70,7 +84,9 @@ func (am *AlternativeMonitor) WaitForFlinkProcessingAlternative(ctx context.Cont
 		}
 	}
 
-	fmt.Printf("⚠️  No processing detected after %d attempts. Proceeding anyway...\n", maxAttempts)
+	if am.logger != nil {
+		am.logger.Warn("no processing detected after attempts", "attempts", maxAttempts)
+	}
 	return nil // Don't fail - processing might still be working
 }
 
@@ -201,7 +217,9 @@ func (am *AlternativeMonitor) checkFlinkJobsRunning() (bool, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			if am.logger != nil {
+				am.logger.Warn("failed close response body", "err", err)
+			}
 		}
 	}()
 

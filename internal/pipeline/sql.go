@@ -8,18 +8,21 @@ import (
 	"sort"
 	"strings"
 
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/types"
 )
 
 // SQLLoader handles loading and parsing SQL statements from files
 type SQLLoader struct {
 	projectDir string
+	logger     logpkg.Logger
 }
 
 // NewSQLLoader creates a new SQL loader
 func NewSQLLoader(projectDir string) *SQLLoader {
 	return &SQLLoader{
 		projectDir: projectDir,
+		logger:     logpkg.Global(),
 	}
 }
 
@@ -67,9 +70,11 @@ func (loader *SQLLoader) LoadStatements() ([]*types.SQLStatement, error) {
 		stmt.Order = i + 1
 	}
 
-	fmt.Printf("📖 Loaded %d SQL statements from %s\n", len(statements), sqlDir)
-	for _, stmt := range statements {
-		fmt.Printf("  %d. %s\n", stmt.Order, stmt.Name)
+	if loader.logger != nil {
+		loader.logger.Info("loaded sql statements", "count", len(statements), "dir", sqlDir)
+		for _, stmt := range statements {
+			loader.logger.Debug("sql statement", "order", stmt.Order, "name", stmt.Name)
+		}
 	}
 
 	return statements, nil
@@ -252,7 +257,9 @@ func (loader *SQLLoader) extractTopicFromCreateTable(sql string) string {
 							end := strings.Index(value[start+1:], "'")
 							if end != -1 {
 								topic := value[start+1 : start+1+end]
-								fmt.Printf("DEBUG: Extracted topic using fallback: %s\n", topic)
+								if loader.logger != nil {
+									loader.logger.Debug("extracted topic fallback", "topic", topic)
+								}
 								return topic
 							}
 						}

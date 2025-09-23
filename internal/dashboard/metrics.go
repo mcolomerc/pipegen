@@ -10,8 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/segmentio/kafka-go"
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/types"
+
+	"github.com/segmentio/kafka-go"
 )
 
 // MetricsCollector collects metrics from various pipeline components
@@ -28,6 +30,7 @@ type MetricsCollector struct {
 	// Collection intervals
 	kafkaInterval time.Duration
 	flinkInterval time.Duration
+	logger        logpkg.Logger
 }
 
 // NewMetricsCollector creates a new metrics collector
@@ -40,6 +43,7 @@ func NewMetricsCollector() *MetricsCollector {
 		},
 		kafkaInterval: 2 * time.Second,
 		flinkInterval: 3 * time.Second,
+		logger:        logpkg.Global(),
 	}
 }
 
@@ -70,7 +74,7 @@ func (mc *MetricsCollector) collectKafkaMetrics(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := mc.updateKafkaMetrics(); err != nil {
-				fmt.Printf("⚠️  Failed to collect Kafka metrics: %v\n", err)
+				mc.logger.Warn("failed to collect kafka metrics", "error", err)
 			}
 		}
 	}
@@ -87,7 +91,7 @@ func (mc *MetricsCollector) collectFlinkMetrics(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := mc.updateFlinkMetrics(); err != nil {
-				fmt.Printf("⚠️  Failed to collect Flink metrics: %v\n", err)
+				mc.logger.Warn("failed to collect flink metrics", "error", err)
 			}
 		}
 	}
@@ -214,7 +218,7 @@ func (mc *MetricsCollector) updateFlinkMetrics() error {
 	// Get jobs list
 	jobsResp, err := http.Get(mc.flinkURL + "/jobs")
 	if err != nil {
-		fmt.Printf("⚠️  Failed to get Flink jobs: %v\n", err)
+		mc.logger.Warn("failed to get flink jobs", "error", err)
 		return nil // Don't fail completely
 	}
 	defer func() { _ = jobsResp.Body.Close() }()

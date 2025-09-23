@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	logpkg "pipegen/internal/log"
+
 	"github.com/linkedin/goavro/v2"
 	"github.com/riferrei/srclient"
 	"github.com/segmentio/kafka-go"
@@ -17,6 +19,7 @@ type Consumer struct {
 	codec     *goavro.Codec
 	srClient  *srclient.SchemaRegistryClient
 	startTime time.Time
+	logger    logpkg.Logger
 }
 
 // NewConsumer creates a new Kafka consumer
@@ -25,7 +28,8 @@ func NewConsumer(config *Config) (*Consumer, error) {
 	// to demonstrate that the pipeline is processing messages correctly
 	topicName := "output-results"
 
-	fmt.Printf("[Consumer] Creating consumer with bootstrap servers: %s\n", config.BootstrapServers)
+	logger := logpkg.Global()
+	logger.Info("creating consumer", "bootstrap", config.BootstrapServers)
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  []string{config.BootstrapServers},
 		Topic:    topicName,
@@ -33,17 +37,18 @@ func NewConsumer(config *Config) (*Consumer, error) {
 		MaxBytes: 10e6, // 10MB
 	})
 
-	fmt.Printf("[Consumer] Reader configured with brokers: %v\n", config.BootstrapServers)
+	logger.Info("reader configured", "brokers", config.BootstrapServers)
 
 	return &Consumer{
 		config: config,
 		reader: reader,
+		logger: logger,
 	}, nil
 }
 
 // StartWithExpectedCount begins consuming messages and stops after reaching expected count or context cancellation
 func (c *Consumer) StartWithExpectedCount(ctx context.Context, topic string, expectedMessages int64) error {
-	fmt.Printf("👂 Starting consumer for topic: %s (expecting %d messages)\n", topic, expectedMessages)
+	c.logger.Info("consumer start expected", "topic", topic, "expected", expectedMessages)
 	c.startTime = time.Now()
 
 	// Update global status to show consumer has started
@@ -65,19 +70,19 @@ func (c *Consumer) StartWithExpectedCount(ctx context.Context, topic string, exp
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("🛑 Consumer stopping due to context cancellation. Consumed %d messages (%d errors)\n", messageCount, errorCount)
+			c.logger.Info("consumer stopping context", "messages", messageCount, "errors", errorCount)
 			return c.reader.Close()
 
 		default:
 			// Check if we've reached the expected message count
 			if expectedMessages > 0 && messageCount >= expectedMessages {
-				fmt.Printf("✅ Consumer completed successfully! Consumed %d/%d expected messages\n", messageCount, expectedMessages)
+				c.logger.Info("consumer completed", "messages", messageCount, "expected", expectedMessages)
 				return c.reader.Close()
 			}
 
 			// Check for timeout if no messages received recently
 			if time.Since(lastMessageTime) > noMessageTimeout && messageCount == 0 {
-				fmt.Printf("⏰ Consumer stopping - no messages received for %v\n", noMessageTimeout)
+				c.logger.Warn("consumer no messages timeout", "timeout", noMessageTimeout)
 				return c.reader.Close()
 			}
 
@@ -91,14 +96,14 @@ func (c *Consumer) StartWithExpectedCount(ctx context.Context, topic string, exp
 				if err == context.DeadlineExceeded {
 					continue
 				}
-				fmt.Printf("❌ Consumer error: %v\n", err)
+				c.logger.Error("consumer fetch error", "err", err)
 				errorCount++
 				continue
 			}
 
 			// Process message
 			if err := c.processMessage(&message); err != nil {
-				fmt.Printf("⚠️  Failed to process message: %v\n", err)
+				c.logger.Warn("failed process message", "err", err)
 				errorCount++
 			} else {
 				messageCount++
@@ -107,7 +112,7 @@ func (c *Consumer) StartWithExpectedCount(ctx context.Context, topic string, exp
 
 			// Commit message
 			if err := c.reader.CommitMessages(ctx, message); err != nil {
-				fmt.Printf("⚠️  Failed to commit message: %v\n", err)
+				c.logger.Warn("failed commit message", "err", err)
 			}
 
 			// Log progress periodically (every 5 seconds)
@@ -128,7 +133,7 @@ func (c *Consumer) StartWithExpectedCount(ctx context.Context, topic string, exp
 				// Show progress towards expected count
 				if expectedMessages > 0 {
 					progress := float64(messageCount) / float64(expectedMessages) * 100
-					fmt.Printf("📊 Consumer progress: %d/%d messages (%.1f%% complete)\n", messageCount, expectedMessages, progress)
+					c.logger.Info("consumer progress", "messages", messageCount, "expected", expectedMessages, "pct", fmt.Sprintf("%.1f", progress))
 				}
 			}
 		}
@@ -137,7 +142,7 @@ func (c *Consumer) StartWithExpectedCount(ctx context.Context, topic string, exp
 
 // Start begins consuming messages from the specified topic
 func (c *Consumer) Start(ctx context.Context, topic string) error {
-	fmt.Printf("👂 Starting consumer for topic: %s\n", topic)
+	c.logger.Info("consumer start", "topic", topic)
 	c.startTime = time.Now()
 
 	// Update global status to show consumer has started
@@ -157,7 +162,7 @@ func (c *Consumer) Start(ctx context.Context, topic string) error {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("🛑 Consumer stopping. Consumed %d messages (%d errors)\n", messageCount, errorCount)
+			c.logger.Info("consumer stopping", "messages", messageCount, "errors", errorCount)
 			return c.reader.Close()
 
 		default:
@@ -171,14 +176,14 @@ func (c *Consumer) Start(ctx context.Context, topic string) error {
 				if err == context.DeadlineExceeded {
 					continue
 				}
-				fmt.Printf("❌ Consumer error: %v\n", err)
+				c.logger.Error("consumer fetch error", "err", err)
 				errorCount++
 				continue
 			}
 
 			// Process message
 			if err := c.processMessage(&message); err != nil {
-				fmt.Printf("⚠️  Failed to process message: %v\n", err)
+				c.logger.Warn("failed process message", "err", err)
 				errorCount++
 			} else {
 				messageCount++
@@ -186,7 +191,7 @@ func (c *Consumer) Start(ctx context.Context, topic string) error {
 
 			// Commit message
 			if err := c.reader.CommitMessages(ctx, message); err != nil {
-				fmt.Printf("⚠️  Failed to commit message: %v\n", err)
+				c.logger.Warn("failed commit message", "err", err)
 			}
 
 			// Log progress periodically (every 5 seconds instead of 10)
@@ -247,12 +252,8 @@ func (c *Consumer) processMessage(msg *kafka.Message) error {
 		}
 
 		// Log message details (limited to avoid spam)
-		if len(msg.Value) > 0 {
-			fmt.Printf("✅ Processed message: topic=%s partition=%d offset=%d size=%d bytes\n",
-				msg.Topic,
-				msg.Partition,
-				msg.Offset,
-				len(msg.Value))
+		if len(msg.Value) > 0 && c.logger != nil {
+			c.logger.Debug("processed message", "topic", msg.Topic, "partition", msg.Partition, "offset", msg.Offset, "size", len(msg.Value))
 		}
 	}
 

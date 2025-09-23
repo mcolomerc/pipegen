@@ -48,192 +48,170 @@ func runInit(cmd *cobra.Command, args []string) error {
 	inputSchemaPath, _ := cmd.Flags().GetString("input-schema")
 	description, _ := cmd.Flags().GetString("describe")
 	domain, _ := cmd.Flags().GetString("domain")
-
+	csvPath, _ := cmd.Flags().GetString("input-csv")
 	projectPath := filepath.Join(".", projectName)
 
-	// Check if directory exists
-	if _, err := os.Stat(projectPath); !os.IsNotExist(err) && !force {
-		return fmt.Errorf("directory %s already exists. Use --force to overwrite", projectPath)
+	if err := validateProjectDir(projectPath, force); err != nil {
+		return err
 	}
-
-	// Allow combining --input-schema with --describe (Issue #8)
-	// If both provided, we'll ground AI with the provided schema content
-
-	csvPath, _ := cmd.Flags().GetString("input-csv")
-	// Validate input schema file if provided
-	if inputSchemaPath != "" {
-		if _, err := os.Stat(inputSchemaPath); os.IsNotExist(err) {
-			return fmt.Errorf("input schema file not found: %s", inputSchemaPath)
-		}
+	if err := validateInputFile(inputSchemaPath, "input schema"); err != nil {
+		return err
+	}
+	if err := validateInputFile(csvPath, "input CSV"); err != nil {
+		return err
 	}
 
 	fmt.Printf("Initializing streaming pipeline project: %s\n", projectName)
-
-	// Check if local mode is enabled from config (defaults to true)
-	localMode := viper.GetBool("local_mode")
-
-	// Initialize LLM service for AI-powered generation
-	llmService := llm.NewLLMService()
-
-	// Handle AI-powered generation
-
-	// Validate CSV file if provided
 	if csvPath != "" {
-		if _, err := os.Stat(csvPath); os.IsNotExist(err) {
-			return fmt.Errorf("input CSV file not found: %s", csvPath)
-		}
 		fmt.Printf("📄 Using provided input CSV: %s\n", csvPath)
 	}
+
+	localMode := viper.GetBool("local_mode")
+	llmService := llm.NewLLMService()
+
+	var err error
 	if description != "" {
-		if !llmService.IsEnabled() {
-			// Fallback to minimal generation when AI is not available
-			fmt.Println("🤖 LLM service not available. Falling back to minimal generation.")
-			if inputSchemaPath != "" {
-				fmt.Println("📋 Using provided input schema for schema-based generation")
-			} else {
-				fmt.Println("📋 No input schema provided; generating with default schema and templates")
-			}
-
-			gen, err := generator.NewProjectGenerator(projectName, projectPath, localMode)
-			if err != nil {
-				return fmt.Errorf("failed to create generator: %w", err)
-			}
-			if inputSchemaPath != "" {
-				gen.SetInputSchemaPath(inputSchemaPath)
-			}
-			if csvPath != "" {
-				gen.SetInputCSVPath(csvPath)
-			}
-
-			if err := gen.Generate(); err != nil {
-				return fmt.Errorf("failed to generate project: %w", err)
-			}
-		} else {
-
-			fmt.Printf("🤖 Generating pipeline with AI assistance (%s)...\n", llmService.GetProvider())
-			fmt.Printf("📝 Description: %s\n", description)
-			if domain != "" {
-				fmt.Printf("🏢 Domain: %s\n", domain)
-			}
-
-			// Generate content with LLM (optionally grounded with input schema)
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-
-			var generatedContent *llm.GeneratedContent
-			var err error
-
-			// Decide grounding strategy
-			if inputSchemaPath != "" {
-				// Provided schema takes precedence
-				schemaBytes, readErr := os.ReadFile(inputSchemaPath)
-				if readErr != nil {
-					return fmt.Errorf("failed to read input schema file: %w", readErr)
-				}
-				generatedContent, err = llmService.GeneratePipelineWithSchema(ctx, string(schemaBytes), description, domain)
-			} else if csvPath != "" {
-				// Perform lightweight analysis and use CSV-grounded prompt
-				an := generator.NewCSVAnalyzer(csvPath)
-				res, aErr := an.Analyze()
-				if aErr != nil {
-					return fmt.Errorf("CSV analysis failed: %w", aErr)
-				}
-				analysisSummary := generator.ExportAnalysisForPrompt(res, 25)
-				avroBytes, avErr := generator.GenerateAVROFromAnalysis(projectName, res)
-				if avErr != nil {
-					return fmt.Errorf("failed to generate AVRO from analysis: %w", avErr)
-				}
-				generatedContent, err = llmService.GeneratePipelineWithCSVAnalysis(ctx, description, domain, analysisSummary, string(avroBytes))
-			} else {
-				generatedContent, err = llmService.GeneratePipeline(ctx, description, domain)
-			}
-			if err != nil {
-				return fmt.Errorf("AI generation failed: %w", err)
-			}
-
-			fmt.Println("✨ AI generation completed!")
-			fmt.Printf("📊 Generated: %s\n", generatedContent.Description)
-
-			// Create generator with LLM content
-			// Prefer the user-provided schema as canonical input schema if available
-			finalInputSchema := generatedContent.InputSchema
-			if inputSchemaPath != "" {
-				if b, e := os.ReadFile(inputSchemaPath); e == nil {
-					finalInputSchema = string(b)
-				}
-			}
-
-			llmContent := &generator.LLMContent{
-				InputSchema:   finalInputSchema,
-				OutputSchema:  generatedContent.OutputSchema,
-				SQLStatements: generatedContent.SQLStatements,
-				Description:   generatedContent.Description,
-				Optimizations: generatedContent.Optimizations,
-			}
-			llmGen, err := generator.NewProjectGeneratorWithLLM(projectName, projectPath, localMode, llmContent)
-			if err != nil {
-				return fmt.Errorf("failed to create LLM generator: %w", err)
-			}
-
-			// If user provided an input schema, set it explicitly so the file is written as canonical input.avsc
-			if inputSchemaPath != "" {
-				if b, e := os.ReadFile(inputSchemaPath); e == nil {
-					llmGen.SetInputSchemaContent(string(b))
-				}
-			}
-			if csvPath != "" {
-				llmGen.SetInputCSVPath(csvPath) // (Will be implemented in generator)
-			}
-
-			// Print optimizations
-			if len(generatedContent.Optimizations) > 0 {
-				fmt.Println("\n💡 AI Optimization Suggestions:")
-				for _, opt := range generatedContent.Optimizations {
-					fmt.Printf("  • %s\n", opt)
-				}
-			}
-
-			// Provide CSV path (will trigger inference if no schema content overrides it)
-			if csvPath != "" && inputSchemaPath == "" && strings.TrimSpace(llmGen.InputSchemaContent) == "" {
-				llmGen.SetInputCSVPath(csvPath)
-			}
-
-			// Generate the project using LLM generator
-			if err := llmGen.Generate(); err != nil {
-				return fmt.Errorf("failed to generate project: %w", err)
-			}
-		}
+		err = handleAIGeneration(projectName, projectPath, localMode, inputSchemaPath, csvPath, description, domain, llmService)
 	} else {
-		// Standard generation
-		if inputSchemaPath != "" {
-			fmt.Printf("📋 Using provided input schema: %s\n", inputSchemaPath)
-		} else {
-			fmt.Println("📋 Generating default input schema (use --input-schema to provide your own)")
-		}
-
-		gen, err := generator.NewProjectGenerator(projectName, projectPath, localMode)
-		if err != nil {
-			return fmt.Errorf("failed to create generator: %w", err)
-		}
-		if inputSchemaPath != "" {
-			gen.SetInputSchemaPath(inputSchemaPath)
-		}
-		if csvPath != "" {
-			gen.SetInputCSVPath(csvPath) // (Will be implemented in generator)
-		}
-
-		// Generate the project using standard generator
-		if err := gen.Generate(); err != nil {
-			return fmt.Errorf("failed to generate project: %w", err)
-		}
+		err = handleStandardGeneration(projectName, projectPath, localMode, inputSchemaPath, csvPath)
+	}
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("✅ Project %s initialized successfully!\n", projectName)
 	fmt.Printf("📁 Project structure created at: %s\n", projectPath)
-
-	// Print next steps
 	printNextSteps(projectName, localMode, description != "")
+	return nil
+}
 
+func validateProjectDir(projectPath string, force bool) error {
+	if _, err := os.Stat(projectPath); !os.IsNotExist(err) && !force {
+		return fmt.Errorf("directory %s already exists. Use --force to overwrite", projectPath)
+	}
+	return nil
+}
+
+func validateInputFile(path, label string) error {
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("%s file not found: %s", label, path)
+	}
+	return nil
+}
+
+func handleAIGeneration(projectName, projectPath string, localMode bool, inputSchemaPath, csvPath, description, domain string, llmService *llm.LLMService) error {
+	if !llmService.IsEnabled() {
+		fmt.Println("🤖 LLM service not available. Falling back to minimal generation.")
+		if inputSchemaPath != "" {
+			fmt.Println("📋 Using provided input schema for schema-based generation")
+		} else {
+			fmt.Println("📋 No input schema provided; generating with default schema and templates")
+		}
+		return handleStandardGeneration(projectName, projectPath, localMode, inputSchemaPath, csvPath)
+	}
+
+	fmt.Printf("🤖 Generating pipeline with AI assistance (%s)...\n", llmService.GetProvider())
+	fmt.Printf("📝 Description: %s\n", description)
+	if domain != "" {
+		fmt.Printf("🏢 Domain: %s\n", domain)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var generatedContent *llm.GeneratedContent
+	var err error
+	switch {
+	case inputSchemaPath != "":
+		schemaBytes, readErr := os.ReadFile(inputSchemaPath)
+		if readErr != nil {
+			return fmt.Errorf("failed to read input schema file: %w", readErr)
+		}
+		generatedContent, err = llmService.GeneratePipelineWithSchema(ctx, string(schemaBytes), description, domain)
+	case csvPath != "":
+		an := generator.NewCSVAnalyzer(csvPath)
+		res, aErr := an.Analyze()
+		if aErr != nil {
+			return fmt.Errorf("CSV analysis failed: %w", aErr)
+		}
+		analysisSummary := generator.ExportAnalysisForPrompt(res, 25)
+		avroBytes, avErr := generator.GenerateAVROFromAnalysis(projectName, res)
+		if avErr != nil {
+			return fmt.Errorf("failed to generate AVRO from analysis: %w", avErr)
+		}
+		generatedContent, err = llmService.GeneratePipelineWithCSVAnalysis(ctx, description, domain, analysisSummary, string(avroBytes))
+	default:
+		generatedContent, err = llmService.GeneratePipeline(ctx, description, domain)
+	}
+	if err != nil {
+		return fmt.Errorf("AI generation failed: %w", err)
+	}
+
+	fmt.Println("✨ AI generation completed!")
+	fmt.Printf("📊 Generated: %s\n", generatedContent.Description)
+
+	finalInputSchema := generatedContent.InputSchema
+	if inputSchemaPath != "" {
+		if b, e := os.ReadFile(inputSchemaPath); e == nil {
+			finalInputSchema = string(b)
+		}
+	}
+	llmContent := &generator.LLMContent{
+		InputSchema:   finalInputSchema,
+		OutputSchema:  generatedContent.OutputSchema,
+		SQLStatements: generatedContent.SQLStatements,
+		Description:   generatedContent.Description,
+		Optimizations: generatedContent.Optimizations,
+	}
+	llmGen, err := generator.NewProjectGeneratorWithLLM(projectName, projectPath, localMode, llmContent)
+	if err != nil {
+		return fmt.Errorf("failed to create LLM generator: %w", err)
+	}
+	if inputSchemaPath != "" {
+		if b, e := os.ReadFile(inputSchemaPath); e == nil {
+			llmGen.SetInputSchemaContent(string(b))
+		}
+	}
+	if csvPath != "" {
+		llmGen.SetInputCSVPath(csvPath)
+	}
+	if len(generatedContent.Optimizations) > 0 {
+		fmt.Println("\n💡 AI Optimization Suggestions:")
+		for _, opt := range generatedContent.Optimizations {
+			fmt.Printf("  • %s\n", opt)
+		}
+	}
+	if csvPath != "" && inputSchemaPath == "" && strings.TrimSpace(llmGen.InputSchemaContent) == "" {
+		llmGen.SetInputCSVPath(csvPath)
+	}
+	if err := llmGen.Generate(); err != nil {
+		return fmt.Errorf("failed to generate project: %w", err)
+	}
+	return nil
+}
+
+func handleStandardGeneration(projectName, projectPath string, localMode bool, inputSchemaPath, csvPath string) error {
+	if inputSchemaPath != "" {
+		fmt.Printf("📋 Using provided input schema: %s\n", inputSchemaPath)
+	} else {
+		fmt.Println("📋 Generating default input schema (use --input-schema to provide your own)")
+	}
+	gen, err := generator.NewProjectGenerator(projectName, projectPath, localMode)
+	if err != nil {
+		return fmt.Errorf("failed to create generator: %w", err)
+	}
+	if inputSchemaPath != "" {
+		gen.SetInputSchemaPath(inputSchemaPath)
+	}
+	if csvPath != "" {
+		gen.SetInputCSVPath(csvPath)
+	}
+	if err := gen.Generate(); err != nil {
+		return fmt.Errorf("failed to generate project: %w", err)
+	}
 	return nil
 }
 

@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	logpkg "pipegen/internal/log"
 )
 
 // ServiceCheck represents a service health check configuration
@@ -18,25 +20,31 @@ type ServiceCheck struct {
 // ServiceWaiter handles waiting for services to be ready
 type ServiceWaiter struct {
 	services []ServiceCheck
+	logger   logpkg.Logger
 }
 
 // NewServiceWaiter creates a new service waiter
 func NewServiceWaiter(services []ServiceCheck) *ServiceWaiter {
 	return &ServiceWaiter{
 		services: services,
+		logger:   logpkg.Global(),
 	}
 }
 
 // WaitForAll waits for all services to be ready
 func (w *ServiceWaiter) WaitForAll(ctx context.Context) error {
 	for _, service := range w.services {
-		fmt.Printf("⏳ Waiting for %s to be ready...\n", service.Name)
+		if w.logger != nil {
+			w.logger.Info("waiting for service", "service", service.Name)
+		}
 
 		if err := w.waitForService(ctx, service); err != nil {
 			return fmt.Errorf("service %s failed to start: %w", service.Name, err)
 		}
 
-		fmt.Printf("✅ %s is ready\n", service.Name)
+		if w.logger != nil {
+			w.logger.Info("service ready", "service", service.Name)
+		}
 	}
 
 	return nil
@@ -55,7 +63,9 @@ func (w *ServiceWaiter) waitForService(ctx context.Context, service ServiceCheck
 			ready, err := w.checkService(service)
 			if err != nil {
 				// Log error but continue retrying
-				fmt.Printf("    %s check failed: %v\n", service.Name, err)
+				if w.logger != nil {
+					w.logger.Debug("service check failed", "service", service.Name, "err", err)
+				}
 				continue
 			}
 			if ready {

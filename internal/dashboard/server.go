@@ -12,10 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/pipeline"
 	"pipegen/internal/types"
+
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 // webFiles will be injected from main package
@@ -41,6 +43,7 @@ type DashboardServer struct {
 	// Pipeline state
 	pipelineStatus *PipelineStatus
 	statusMutex    sync.RWMutex
+	logger         logpkg.Logger
 }
 
 // PipelineStatus holds comprehensive pipeline state
@@ -262,6 +265,7 @@ func NewDashboardServer(port int) *DashboardServer {
 			StartTime:   time.Now(),
 			LastUpdated: time.Now(),
 		},
+		logger: logpkg.Global(),
 	}
 
 	server.setupRoutes()
@@ -318,7 +322,7 @@ func (ds *DashboardServer) Start(ctx context.Context) error {
 	// Start WebSocket broadcast loop
 	go ds.broadcastLoop(ctx)
 
-	fmt.Printf("🚀 Dashboard server starting on http://localhost:%d\n", ds.port)
+	ds.logger.Info("dashboard server starting", "port", ds.port)
 	return ds.server.ListenAndServe()
 }
 
@@ -509,7 +513,7 @@ func (ds *DashboardServer) handleExport(w http.ResponseWriter, r *http.Request) 
 func (ds *DashboardServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := ds.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Printf("WebSocket upgrade failed: %v\n", err)
+		ds.logger.Warn("websocket upgrade failed", "error", err)
 		return
 	}
 	defer func() {
@@ -522,7 +526,7 @@ func (ds *DashboardServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 	ds.clients[conn] = true
 	ds.clientsMutex.Unlock()
 
-	fmt.Printf("📡 New WebSocket client connected (total: %d)\n", len(ds.clients))
+	ds.logger.Debug("websocket client connected", "total", len(ds.clients))
 
 	// Send initial status
 	ds.statusMutex.RLock()
@@ -540,7 +544,7 @@ func (ds *DashboardServer) handleWebSocket(w http.ResponseWriter, r *http.Reques
 			ds.clientsMutex.Lock()
 			delete(ds.clients, conn)
 			ds.clientsMutex.Unlock()
-			fmt.Printf("📡 WebSocket client disconnected (total: %d)\n", len(ds.clients))
+			ds.logger.Debug("websocket client disconnected", "total", len(ds.clients))
 			break
 		}
 	}

@@ -30,57 +30,42 @@ func TestFlinkDeployer_SubstituteVariables(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-// Table-driven tests for extractSessionID, extractOperationHandle, extractOperationStatus, extractOperationError
-func TestExtractHelpers(t *testing.T) {
-	tests := []struct {
-		name     string
-		fn       func(string) string
-		input    string
-		expected string
-	}{
-		{
-			name:     "extractSessionID valid",
-			fn:       extractSessionID,
-			input:    `{"sessionHandle":"abc123"}`,
-			expected: "abc123",
-		},
-		{
-			name:     "extractSessionID missing",
-			fn:       extractSessionID,
-			input:    `{}`,
-			expected: "",
-		},
-		{
-			name:     "extractOperationHandle valid",
-			fn:       extractOperationHandle,
-			input:    `{"operationHandle":"op456"}`,
-			expected: "op456",
-		},
-		{
-			name:     "extractOperationStatus valid",
-			fn:       extractOperationStatus,
-			input:    `{"status":"FINISHED"}`,
-			expected: "FINISHED",
-		},
-		{
-			name:     "extractOperationError valid",
-			fn:       extractOperationError,
-			input:    `{"error":"failure"}`,
-			expected: "failure",
-		},
-		{
-			name:     "extractOperationError missing",
-			fn:       extractOperationError,
-			input:    `{}`,
-			expected: "",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.fn(tt.input)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
+// Tests for new JSON parsing helpers
+func TestJSONParsingHelpers(t *testing.T) {
+	t.Run("parseSessionID valid", func(t *testing.T) {
+		id, err := parseSessionID([]byte(`{"sessionHandle":"abc123"}`))
+		assert.NoError(t, err)
+		assert.Equal(t, "abc123", id)
+	})
+	t.Run("parseSessionID missing", func(t *testing.T) {
+		_, err := parseSessionID([]byte(`{}`))
+		assert.Error(t, err)
+	})
+	t.Run("parseStatementOperationHandle valid", func(t *testing.T) {
+		op, err := parseStatementOperationHandle([]byte(`{"operationHandle":"op456"}`))
+		assert.NoError(t, err)
+		assert.Equal(t, "op456", op)
+	})
+	t.Run("parseStatementOperationHandle missing", func(t *testing.T) {
+		_, err := parseStatementOperationHandle([]byte(`{}`))
+		assert.Error(t, err)
+	})
+	t.Run("parseOperationStatus finished", func(t *testing.T) {
+		st, err := parseOperationStatus([]byte(`{"status":"FINISHED"}`))
+		assert.NoError(t, err)
+		assert.Equal(t, "FINISHED", st.Status)
+		assert.Equal(t, "", st.Error)
+	})
+	t.Run("parseOperationStatus error with message", func(t *testing.T) {
+		st, err := parseOperationStatus([]byte(`{"status":"ERROR","error":"boom"}`))
+		assert.NoError(t, err)
+		assert.Equal(t, "ERROR", st.Status)
+		assert.Equal(t, "boom", st.Error)
+	})
+	t.Run("parseOperationStatus missing status", func(t *testing.T) {
+		_, err := parseOperationStatus([]byte(`{"error":"boom"}`))
+		assert.Error(t, err)
+	})
 }
 
 // Test escapeJSONString escapes quotes, backslashes, and newlines

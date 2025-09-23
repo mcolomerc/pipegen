@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	logpkg "pipegen/internal/log"
 	templates "pipegen/internal/templates"
 )
 
@@ -46,6 +47,54 @@ type Config struct {
 	CSVMode           bool             // When true, skip Kafka producer ONLY (filesystem CSV source table); consumer still runs
 }
 
+// Normalize fills defaults and canonicalizes URLs. Should be called early (e.g. NewRunner)
+func (c *Config) Normalize() {
+	// Default FlinkURL
+	if strings.TrimSpace(c.FlinkURL) == "" {
+		c.FlinkURL = "http://localhost:8081"
+	}
+	// Trim trailing slashes
+	c.FlinkURL = strings.TrimRight(c.FlinkURL, "/")
+	if c.SQLGatewayURL != "" {
+		c.SQLGatewayURL = strings.TrimRight(c.SQLGatewayURL, "/")
+	}
+	// Derive gateway if not explicitly set
+	if c.SQLGatewayURL == "" {
+		c.SQLGatewayURL = DeriveGatewayURL(c.FlinkURL)
+	}
+}
+
+// DeriveGatewayURL computes SQL Gateway base URL from a Flink REST URL.
+// Rules:
+// 1. If input contains :8081 replace with :8083
+// 2. If input already has a port != 8081 reuse scheme/host and append :8083 only if different path not present
+// 3. If no port, append :8083
+func DeriveGatewayURL(flinkURL string) string {
+	// Only transform the canonical UI/REST port 8081 -> gateway 8083.
+	if strings.Contains(flinkURL, ":8081") {
+		return strings.Replace(flinkURL, ":8081", ":8083", 1)
+	}
+	// If some other explicit port already present (e.g. test server random port) keep it as-is.
+	// Heuristic: scheme://host:port (>=2 colons overall) or host:port (1 colon without scheme) but not ending in known path.
+	// We just check last colon followed by digits up to optional slash.
+	trimmed := strings.TrimRight(flinkURL, "/")
+	lastColon := strings.LastIndex(trimmed, ":")
+	if lastColon != -1 && lastColon > len("http://")-1 { // after scheme
+		portPart := trimmed[lastColon+1:]
+		allDigits := true
+		for _, r := range portPart {
+			if r < '0' || r > '9' {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			return trimmed // preserve existing non-8081 port
+		}
+	}
+	return trimmed + ":8083"
+}
+
 // Runner orchestrates the complete pipeline execution
 type Runner struct {
 	config        *Config
@@ -54,6 +103,7 @@ type Runner struct {
 	consumer      *Consumer
 	flinkDeployer *FlinkDeployer
 	sqlLoader     *SQLLoader
+	logger        logpkg.Logger
 }
 
 // TopicInfo represents information about a Kafka topic
@@ -124,6 +174,8 @@ type ConsumerStatistics struct {
 
 // NewRunner creates a new pipeline runner
 func NewRunner(config *Config) (*Runner, error) {
+	// Normalize config early
+	config.Normalize()
 	resourceMgr := NewResourceManager(config)
 
 	producer, err := NewProducer(config)
@@ -138,13 +190,18 @@ func NewRunner(config *Config) (*Runner, error) {
 
 	var flinkDeployer *FlinkDeployer
 	if config.GlobalTables {
-		fmt.Println("🌍 Using global table creation mode")
 		flinkDeployer = NewFlinkDeployerGlobal(config)
 	} else {
-		fmt.Println("🔒 Using session-based table creation mode")
 		flinkDeployer = NewFlinkDeployer(config)
 	}
 	sqlLoader := NewSQLLoader(config.ProjectDir)
+
+	logger := logpkg.Global()
+	if config.GlobalTables {
+		logger.Info("mode selected", "mode", "global")
+	} else {
+		logger.Info("mode selected", "mode", "session")
+	}
 
 	return &Runner{
 		config:        config,
@@ -153,6 +210,7 @@ func NewRunner(config *Config) (*Runner, error) {
 		consumer:      consumer,
 		flinkDeployer: flinkDeployer,
 		sqlLoader:     sqlLoader,
+		logger:        logger,
 	}, nil
 }
 
@@ -168,7 +226,7 @@ func (r *Runner) generateExecutionID() string {
 
 // Run executes the complete pipeline
 func (r *Runner) Run(ctx context.Context) error {
-	fmt.Println("🔄 Starting pipeline execution...")
+	r.logger.Info("pipeline start")
 
 	// Set up pipeline timeout context
 	pipelineCtx := ctx
@@ -176,7 +234,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		var cancelPipeline context.CancelFunc
 		pipelineCtx, cancelPipeline = context.WithTimeout(ctx, r.config.PipelineTimeout)
 		defer cancelPipeline()
-		fmt.Printf("⏰ Pipeline timeout set to: %v\n", r.config.PipelineTimeout)
+		r.logger.Info("pipeline timeout configured", "timeout", r.config.PipelineTimeout.String())
 	}
 
 	// Track pipeline start time for reporting
@@ -188,7 +246,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	if r.config.GenerateReport {
 		executionID = r.generateExecutionID()
-		fmt.Printf("📊 Execution ID: %s\n", executionID)
+		r.logger.Info("execution id generated", "execution_id", executionID)
 
 		// Create basic data collector
 		dataCollector = map[string]interface{}{
@@ -208,15 +266,15 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// Step 1: Load SQL statements
-	fmt.Println("📖 Loading SQL statements...")
+	r.logger.Info("loading sql statements")
 	sqlStatements, err := r.sqlLoader.LoadStatements()
 	if err != nil {
 		return fmt.Errorf("failed to load SQL statements: %w", err)
 	}
-	fmt.Printf("✅ Loaded %d SQL statements\n", len(sqlStatements))
+	r.logger.Info("sql statements loaded", "count", len(sqlStatements))
 
 	// Step 2: Load AVRO schemas (optional when topics are defined in SQL)
-	fmt.Println("📋 Loading AVRO schemas...")
+	r.logger.Info("loading avro schemas")
 
 	// Check if we have topics defined in SQL statements
 	sqlTopics := r.sqlLoader.ExtractTopicsFromSQL(sqlStatements)
@@ -225,97 +283,96 @@ func (r *Runner) Run(ctx context.Context) error {
 	schemaLoader := NewSchemaLoader(r.config.ProjectDir)
 
 	if len(sqlTopics) > 0 {
-		fmt.Printf("📋 Found %d topics defined in SQL statements: %v\n", len(sqlTopics), sqlTopics)
-		fmt.Println("📋 Flink will auto-register schemas from table definitions")
+		r.logger.Info("sql topics detected", "count", len(sqlTopics), "topics", strings.Join(sqlTopics, ","))
+		r.logger.Info("auto-registration mode", "source", "table definitions")
 
 		// Try to load additional manual schemas, but don't fail if they don't exist
 		var err error
 		schemas, err = schemaLoader.LoadSchemas()
 		if err != nil {
-			fmt.Printf("💡 No additional schema files found - Flink will handle all schema registration\n")
+			r.logger.Info("no additional schema files")
 			schemas = make(map[string]*Schema) // Empty map
 		} else {
-			fmt.Printf("📋 Loaded %d additional manual schemas\n", len(schemas))
+			r.logger.Info("additional manual schemas loaded", "count", len(schemas))
 		}
 	} else {
 		// No SQL topics found, schemas are required for backwards compatibility
-		fmt.Println("⚠️  No topics found in SQL statements - falling back to manual schema mode")
+		r.logger.Warn("no topics in sql statements; falling back to manual schema mode")
 		var err error
 		schemas, err = schemaLoader.LoadSchemas()
 		if err != nil {
 			return fmt.Errorf("failed to load schemas: %w", err)
 		}
-		fmt.Printf("✅ Loaded %d AVRO schemas\n", len(schemas))
+		r.logger.Info("schemas loaded", "count", len(schemas))
 	}
 
 	// Step 3: Generate dynamic resource names
-	fmt.Println("🏷️  Generating dynamic resource names...")
+	r.logger.Info("generating dynamic resource names")
 	resources, err := r.resourceMgr.GenerateResources(sqlStatements)
 	if err != nil {
 		return fmt.Errorf("failed to generate resources: %w", err)
 	}
-	fmt.Printf("✅ Generated resources with prefix: %s\n", resources.Prefix)
+	r.logger.Info("resources generated", "prefix", resources.Prefix)
 
 	// Step 4: Clean up existing topics before creation
-	fmt.Println("🧹 Cleaning up existing topics...")
+	r.logger.Info("deleting existing topics")
 	if err := r.resourceMgr.DeleteTopics(ctx, resources); err != nil {
-		fmt.Printf("⚠️  Warning: failed to delete topics: %v\n", err)
+		r.logger.Warn("failed to delete topics", "error", err)
 	} else {
-		fmt.Println("✅ Existing topics deleted")
+		r.logger.Info("existing topics deleted")
 	}
 
 	// Step 5: Create Kafka topics
-	fmt.Println("📝 Creating Kafka topics...")
+	r.logger.Info("creating kafka topics")
 	if err := r.resourceMgr.CreateTopics(ctx, resources); err != nil {
 		return fmt.Errorf("failed to create topics: %w", err)
 	}
-	fmt.Printf("✅ Created %d Kafka topics\n", len(resources.Topics))
+	r.logger.Info("kafka topics created", "count", len(resources.Topics))
 
 	// Step 6: Deploy FlinkSQL statements (Flink will auto-register schemas)
-	fmt.Println("⚡ Deploying FlinkSQL statements...")
+	r.logger.Info("deploying flink sql statements")
 	deploymentIDs, err := r.flinkDeployer.Deploy(ctx, sqlStatements, resources)
 	if err != nil {
 		return fmt.Errorf("failed to deploy FlinkSQL: %w", err)
 	}
-	fmt.Printf("✅ Deployed %d FlinkSQL statements\n", len(deploymentIDs))
+	r.logger.Info("flink sql statements deployed", "count", len(deploymentIDs))
 
 	// Step 7: Register additional AVRO schemas (only if manually provided)
 	if len(schemas) > 0 {
-		fmt.Printf("📋 Registering %d additional AVRO schemas...\n", len(schemas))
+		r.logger.Info("registering additional AVRO schemas", "count", len(schemas))
 		if err := r.resourceMgr.RegisterSchemas(ctx, resources, schemas); err != nil {
-			fmt.Printf("⚠️  Warning: failed to register additional schemas: %v\n", err)
-			fmt.Println("Flink should have auto-registered schemas from table definitions")
+			r.logger.Warn("failed to register additional schemas", "error", err)
+			r.logger.Info("schemas should auto-register from table definitions")
 		} else {
-			fmt.Printf("✅ Registered %d additional schemas\n", len(schemas))
+			r.logger.Info("additional schemas registered", "count", len(schemas))
 		}
 	} else {
-		fmt.Println("📋 No manual schemas to register - Flink will auto-register schemas from table definitions")
+		r.logger.Info("no manual schemas to register; relying on flink auto-registration")
 	}
 
 	// Set up deferred cleanup to ensure it runs even if there are errors
 	defer func() {
 		if r.config.Cleanup {
-			fmt.Println("🧹 Cleaning up resources...")
+			r.logger.Info("cleanup start")
 			if err := r.cleanup(context.Background(), resources, deploymentIDs); err != nil {
-				fmt.Printf("⚠️  Warning: cleanup failed: %v\n", err)
+				r.logger.Error("cleanup failed", "error", err)
 			} else {
-				fmt.Println("✅ Cleanup completed")
+				r.logger.Info("cleanup completed")
 			}
 		}
 	}()
 
 	// Step 7: Wait for Flink jobs to be ready and start processing
-	fmt.Println("⏳ Waiting for Flink jobs to initialize and start processing...")
+	r.logger.Info("waiting for flink jobs to initialize")
 	time.Sleep(3 * time.Second) // Give Flink jobs time to initialize
 
 	if r.config.CSVMode {
-		fmt.Println("📄 CSV mode detected: skipping Kafka producer (filesystem source table assumed). Kafka consumer will still run.")
+		r.logger.Info("csv mode: skipping kafka producer; consumer still runs")
 		// Monitor Flink metrics early
 		go r.monitorFlinkMetrics(pipelineCtx, deploymentIDs)
 	} else {
 		// Step 8: Start producer (runs for specified duration)
-		fmt.Println("📤 Starting Kafka producer...")
-		fmt.Printf("⏱️  Producer will run for %v at %d msg/sec\n", r.config.Duration, r.config.MessageRate)
+		r.logger.Info("starting kafka producer", "duration", r.config.Duration.String(), "rate", r.config.MessageRate)
 
 		producerCtx, cancelProducer := context.WithTimeout(pipelineCtx, r.config.Duration)
 		defer cancelProducer()
@@ -329,7 +386,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		go r.monitorFlinkMetrics(pipelineCtx, deploymentIDs)
 
 		// Step 10: Wait for producer to complete, then wait for Flink to process records
-		fmt.Println("⏳ Waiting for producer to complete before starting consumer...")
+		r.logger.Info("waiting for producer completion before consumer start")
 
 		var producerErr error
 		select {
@@ -337,18 +394,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			if producerErr != nil && producerErr != context.DeadlineExceeded {
 				return fmt.Errorf("producer failed: %w", producerErr)
 			}
-			fmt.Println("✅ Producer completed successfully")
+			r.logger.Info("producer completed successfully")
 		case <-pipelineCtx.Done():
-			fmt.Println("🛑 Pipeline timeout reached during producer phase")
+			r.logger.Error("pipeline timeout during producer phase")
 			return pipelineCtx.Err()
 		}
 	}
 
 	// Step 11: Wait for Flink job to process records before starting consumer
-	fmt.Println("⏳ Waiting for Flink job to process records...")
+	r.logger.Info("waiting for flink job to process records")
 	if err := r.waitForFlinkProcessing(pipelineCtx, deploymentIDs); err != nil {
 		if pipelineCtx.Err() != nil {
-			fmt.Println("🛑 Pipeline timeout reached while waiting for Flink processing")
+			r.logger.Error("pipeline timeout while waiting for flink processing")
 			return pipelineCtx.Err()
 		}
 		return fmt.Errorf("failed waiting for Flink processing: %w", err)
@@ -358,37 +415,37 @@ func (r *Runner) Run(ctx context.Context) error {
 	consumerCompleted := false
 	var consumerDone chan error
 	if r.config.CSVMode {
-		fmt.Println("📄 CSV mode: starting Kafka consumer to validate downstream topic despite filesystem source.")
+		r.logger.Info("csv mode: starting kafka consumer to validate downstream topic")
 	}
 	{
-		fmt.Println("👂 Starting Kafka consumer to read Flink processing results...")
+		r.logger.Info("starting kafka consumer to read flink processing results")
 
 		// Calculate expected messages if not explicitly set
 		if r.config.ExpectedMessages == 0 {
 			if r.config.CSVMode {
 				// In CSV mode we can't estimate from producer; use a reasonable default (all rows processed by Flink)
 				// We'll keep it zero meaning consumer will just read until timeout or completion of Flink job.
-				fmt.Println("📊 CSV mode: no expected message count derived (set --expected if you want bounded consume).")
+				r.logger.Info("csv mode: no expected message count derived; set --expected for bounded consume")
 			} else {
 				// Estimate based on producer stats if available
 				if r.producer != nil {
 					producerStats := r.producer.GetStats()
 					r.config.ExpectedMessages = producerStats.MessagesSent
-					fmt.Printf("📊 Expecting %d messages based on producer output\n", r.config.ExpectedMessages)
+					r.logger.Info("expected messages derived from producer", "count", r.config.ExpectedMessages)
 				} else {
 					// Fallback estimation
 					r.config.ExpectedMessages = int64(float64(r.config.MessageRate) * r.config.Duration.Seconds())
-					fmt.Printf("📊 Expecting ~%d messages based on rate and duration\n", r.config.ExpectedMessages)
+					r.logger.Info("expected messages estimated", "count", r.config.ExpectedMessages)
 				}
 			}
 		} else {
-			fmt.Printf("📊 Expecting %d messages (configured)\n", r.config.ExpectedMessages)
+			r.logger.Info("expected messages configured", "count", r.config.ExpectedMessages)
 		}
 
 		// Initialize consumer with Schema Registry
 		if err := r.consumer.InitializeSchemaRegistry(resources.OutputTopic); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to initialize consumer schema registry: %v\n", err)
-			fmt.Println("Consumer will run without AVRO deserialization")
+			r.logger.Warn("failed to initialize consumer schema registry", "error", err)
+			r.logger.Info("consumer will run without avro deserialization")
 		}
 
 		// Start consumer with smart stopping logic
@@ -404,15 +461,15 @@ func (r *Runner) Run(ctx context.Context) error {
 			if consumerErr != nil {
 				// Check if it's a timeout vs actual error
 				if pipelineCtx.Err() != nil {
-					fmt.Println("🛑 Consumer stopped due to pipeline timeout")
+					r.logger.Error("consumer stopped due to pipeline timeout")
 				} else {
-					fmt.Printf("⚠️  Consumer completed with error: %v\n", consumerErr)
+					r.logger.Error("consumer completed with error", "error", consumerErr)
 				}
 			} else {
-				fmt.Println("✅ Consumer completed successfully")
+				r.logger.Info("consumer completed successfully")
 			}
 		case <-pipelineCtx.Done():
-			fmt.Println("🛑 Pipeline timeout reached during consumer phase")
+			r.logger.Error("pipeline timeout during consumer phase")
 			// Give consumer a moment to stop gracefully
 			time.Sleep(1 * time.Second)
 		}
@@ -423,12 +480,12 @@ func (r *Runner) Run(ctx context.Context) error {
 		select {
 		case consumerErr := <-consumerDone:
 			if consumerErr != nil {
-				fmt.Printf("⚠️  Consumer completed with error after timeout: %v\n", consumerErr)
+				r.logger.Error("consumer completed with error after timeout", "error", consumerErr)
 			} else {
-				fmt.Println("✅ Consumer completed successfully after pipeline timeout")
+				r.logger.Info("consumer completed successfully after pipeline timeout")
 			}
 		case <-time.After(2 * time.Second):
-			fmt.Println("⏰ Consumer did not complete within grace period")
+			r.logger.Warn("consumer did not complete within grace period")
 		}
 	}
 
@@ -441,7 +498,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	if dataCollector != nil {
 		if err := r.generateExecutionReport(dataCollector, finalStatus, actualDuration, resources, schemas); err != nil {
-			fmt.Printf("⚠️  Warning: failed to generate execution report: %v\n", err)
+			r.logger.Warn("failed to generate execution report", "error", err)
 		}
 	}
 
@@ -469,7 +526,7 @@ func (r *Runner) generateExecutionReport(dataCollector interface{}, status strin
 		return nil
 	}
 
-	fmt.Println("📄 Generating execution report...")
+	r.logger.Info("generating execution report", "status", status, "duration", duration.String())
 
 	// Extract report data
 	var reportData map[string]interface{}
@@ -513,9 +570,9 @@ func (r *Runner) generateExecutionReport(dataCollector interface{}, status strin
 	}
 
 	// Create reports directory
-	fmt.Printf("📁 Reports will be saved to: %s\n", reportsDir)
+	r.logger.Info("report directory", "path", reportsDir)
 	if err := os.MkdirAll(reportsDir, 0755); err != nil {
-		fmt.Printf("⚠️  Failed to create reports directory: %v\n", err)
+		r.logger.Error("failed to create reports directory", "error", err)
 		return nil
 	}
 
@@ -528,11 +585,11 @@ func (r *Runner) generateExecutionReport(dataCollector interface{}, status strin
 	htmlContent := r.generateEnhancedHTMLReport(reportData, status, duration, resources, schemas)
 
 	if err := os.WriteFile(reportPath, []byte(htmlContent), 0644); err != nil {
-		fmt.Printf("⚠️  Failed to write execution report: %v\n", err)
+		r.logger.Error("failed to write execution report", "error", err)
 		return nil
 	}
 
-	fmt.Printf("✅ Execution report generated: %s\n", reportPath)
+	r.logger.Info("execution report generated", "path", reportPath)
 	return nil
 }
 
@@ -925,7 +982,7 @@ var globalPipelineStatus = &PipelineStatus{}
 
 // monitorFlinkMetrics periodically reports Flink job metrics during execution
 func (r *Runner) monitorFlinkMetrics(ctx context.Context, deploymentIDs []string) {
-	fmt.Println("📊 Starting Flink metrics monitoring...")
+	r.logger.Info("starting flink metrics monitoring")
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -940,7 +997,7 @@ func (r *Runner) monitorFlinkMetrics(ctx context.Context, deploymentIDs []string
 			hasActivity := r.reportFlinkMetrics(&firstProcessingDetected)
 			// Show different message when first processing is detected
 			if hasActivity && !firstProcessingDetected {
-				fmt.Println("🚀 Flink has started processing data!")
+				r.logger.Info("flink started processing data")
 				firstProcessingDetected = true
 			}
 
@@ -956,26 +1013,22 @@ func (r *Runner) displayPipelineStatus() {
 
 	// Producer status (should already be updated by producer)
 	if status.Producer.MessagesSent > 0 || status.Producer.Elapsed > 0 {
-		fmt.Printf("📈 Producer: %d messages sent (%.1f msg/sec avg, target: %d msg/sec, elapsed: %v)\n",
-			status.Producer.MessagesSent, status.Producer.Rate, status.Producer.Target, status.Producer.Elapsed.Truncate(time.Second))
+		r.logger.Debug("producer status", "messages_sent", status.Producer.MessagesSent, "rate", status.Producer.Rate, "target_rate", status.Producer.Target, "elapsed", status.Producer.Elapsed.Truncate(time.Second).String())
 	}
 
 	// Flink status
 	if status.Flink.JobsRunning > 0 {
-		fmt.Printf("🔄 Flink: %d jobs running and processing data\n", status.Flink.JobsRunning)
+		r.logger.Debug("flink status", "jobs_running", status.Flink.JobsRunning, "processing_active", status.Flink.ProcessingActive)
 	} else {
-		fmt.Printf("❌ Flink: No jobs running\n")
+		r.logger.Warn("no flink jobs running")
 	}
 
 	// Consumer status
 	if status.Consumer.Active {
-		fmt.Printf("📥 Consumer: %d messages processed (%.1f msg/sec avg, %d errors, elapsed: %v)\n",
-			status.Consumer.MessagesProcessed, status.Consumer.Rate, status.Consumer.Errors, status.Consumer.Elapsed.Truncate(time.Second))
+		r.logger.Debug("consumer status", "messages_processed", status.Consumer.MessagesProcessed, "rate", status.Consumer.Rate, "errors", status.Consumer.Errors, "elapsed", status.Consumer.Elapsed.Truncate(time.Second).String())
 	} else {
-		fmt.Printf("⏸️  Consumer: Not started (waiting for data)\n")
+		r.logger.Debug("consumer not started yet")
 	}
-
-	fmt.Println() // Add a blank line for readability
 }
 
 // reportFlinkMetrics fetches and reports current Flink job metrics
@@ -983,18 +1036,18 @@ func (r *Runner) reportFlinkMetrics(firstProcessingDetected *bool) bool {
 	// Get list of running jobs
 	resp, err := http.Get(fmt.Sprintf("%s/jobs", r.config.FlinkURL))
 	if err != nil {
-		fmt.Printf("⚠️  Failed to fetch Flink jobs: %v\n", err)
+		r.logger.Warn("failed to fetch flink jobs", "error", err)
 		return false
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			r.logger.Warn("failed to close response body", "error", err)
 		}
 	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("⚠️  Failed to read Flink jobs response: %v\n", err)
+		r.logger.Warn("failed to read flink jobs response", "error", err)
 		return false
 	}
 
@@ -1006,7 +1059,7 @@ func (r *Runner) reportFlinkMetrics(firstProcessingDetected *bool) bool {
 	}
 
 	if err := json.Unmarshal(body, &jobsResp); err != nil {
-		fmt.Printf("⚠️  Failed to parse Flink jobs response: %v\n", err)
+		r.logger.Warn("failed to parse flink jobs response", "error", err)
 		return false
 	}
 
@@ -1041,7 +1094,7 @@ func (r *Runner) reportFlinkMetrics(firstProcessingDetected *bool) bool {
 
 	if runningJobs == 0 {
 		// No Flink jobs are currently running
-		fmt.Printf("⚠️  No Flink jobs running\n")
+		r.logger.Warn("no flink jobs running")
 	}
 
 	return hasActivity
@@ -1055,7 +1108,7 @@ func (r *Runner) reportSingleJobMetrics(jobID string, firstProcessingDetected *b
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			r.logger.Warn("failed to close response body", "error", err)
 		}
 	}()
 
@@ -1094,11 +1147,9 @@ func (r *Runner) reportSingleJobMetrics(jobID string, firstProcessingDetected *b
 
 	// Only log progress if there's activity or every 30 seconds
 	if totalReadRecords > 0 || totalWriteRecords > 0 {
-		fmt.Printf("� Flink Processing [%s]: %d records read, %d records written (runtime: %v)\n",
-			jobResp.Name, totalReadRecords, totalWriteRecords, elapsed.Truncate(time.Second))
+		r.logger.Debug("flink processing", "job", jobResp.Name, "read_records", totalReadRecords, "write_records", totalWriteRecords, "runtime", elapsed.Truncate(time.Second).String())
 	} else if int(elapsed.Seconds())%30 == 0 {
-		fmt.Printf("⏳ Flink Job [%s]: Waiting for data... (runtime: %v)\n",
-			jobResp.Name, elapsed.Truncate(time.Second))
+		r.logger.Debug("flink job waiting for data", "job", jobResp.Name, "runtime", elapsed.Truncate(time.Second).String())
 	}
 
 	hasActivity := totalReadRecords > 0 || totalWriteRecords > 0
@@ -1110,23 +1161,23 @@ func (r *Runner) reportSingleJobMetrics(jobID string, firstProcessingDetected *b
 
 // waitForFlinkProcessing waits for Flink jobs to process records AND write to output topic before starting consumer
 func (r *Runner) waitForFlinkProcessing(ctx context.Context, deploymentIDs []string) error {
-	fmt.Println("⏳ Checking Flink job metrics for record processing...")
+	r.logger.Info("checking flink job metrics for record processing")
 
 	// Try original approach first
 	recordsProcessed, err := r.getFlinkRecordsProcessedWithFallback(ctx)
 	if err == nil && recordsProcessed > 0 {
-		fmt.Printf("✅ Flink REST API shows %d records processed\n", recordsProcessed)
+		r.logger.Info("flink rest shows records processed", "count", recordsProcessed)
 
 		// Also check if Flink is writing records (not just reading)
 		writeRecords, err := r.getFlinkRecordsWritten()
 		if err == nil && writeRecords > 0 {
-			fmt.Printf("✅ Flink has written %d records to output topic\n", writeRecords)
+			r.logger.Info("flink wrote records to output topic", "count", writeRecords)
 			return nil
 		}
-		fmt.Printf("⚠️  Flink processed %d records but wrote %d records - checking alternative monitoring...\n", recordsProcessed, writeRecords)
+		r.logger.Warn("flink processed records but write count unreliable; using alternative monitoring", "processed", recordsProcessed, "written", writeRecords)
 	}
 
-	fmt.Println("⚠️  Flink REST API metrics are unreliable, using enhanced monitoring...")
+	r.logger.Warn("flink rest metrics unreliable; using enhanced monitoring")
 
 	// Fallback to enhanced monitoring
 	monitor := NewAlternativeMonitor(r.config)
@@ -1170,7 +1221,7 @@ func (r *Runner) getFlinkRecordsWritten() (int64, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			r.logger.Warn("failed to close response body", "error", err)
 		}
 	}()
 
@@ -1197,7 +1248,7 @@ func (r *Runner) getFlinkRecordsWritten() (int64, error) {
 		if job.Status == "RUNNING" {
 			_, writeRecords, err := r.getJobRecordCounts(job.ID)
 			if err != nil {
-				fmt.Printf("⚠️  Failed to get write metrics for job %s: %v\n", job.ID, err)
+				r.logger.Warn("failed to get write metrics for job", "job", job.ID, "error", err)
 				continue
 			}
 			totalRecordsWritten += writeRecords
@@ -1216,7 +1267,7 @@ func (r *Runner) getFlinkRecordsProcessed() (int64, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			r.logger.Warn("failed to close response body", "error", err)
 		}
 	}()
 
@@ -1250,7 +1301,7 @@ func (r *Runner) getFlinkRecordsProcessed() (int64, error) {
 		if job.Status == "RUNNING" {
 			readRecords, writeRecords, err := r.getJobRecordCounts(job.ID)
 			if err != nil {
-				fmt.Printf("⚠️  Failed to get metrics for job %s: %v\n", job.ID, err)
+				r.logger.Warn("failed to get metrics for job", "job", job.ID, "error", err)
 				continue
 			}
 			// Count both read and write records as processing activity
@@ -1269,7 +1320,7 @@ func (r *Runner) getJobRecordCounts(jobID string) (int64, int64, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
+			r.logger.Warn("failed to close response body", "error", err)
 		}
 	}()
 

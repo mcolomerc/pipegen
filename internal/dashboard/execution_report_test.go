@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	logpkg "pipegen/internal/log"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,6 +76,7 @@ func TestExecutionReportGenerator_GenerateReport(t *testing.T) {
 		outputDir:    outputDir,
 		templatePath: templatePath,
 		logoBase64:   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+		logger:       logpkg.NewSimple(logpkg.ErrorLevel),
 	}
 
 	// Test data
@@ -141,6 +144,7 @@ func TestExecutionReportGenerator_TemplateNotFound(t *testing.T) {
 		outputDir:    tmpDir,
 		templatePath: "/nonexistent/template.html",
 		logoBase64:   "",
+		logger:       logpkg.NewSimple(logpkg.ErrorLevel),
 	}
 
 	testReport := &ExecutionReportData{

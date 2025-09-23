@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	logpkg "pipegen/internal/log"
 )
 
 // LLMProvider represents different LLM providers
@@ -28,6 +30,7 @@ type LLMService struct {
 	model    string
 	baseURL  string
 	enabled  bool
+	logger   logpkg.Logger
 }
 
 // NewLLMService creates a new LLM service (optional dependency)
@@ -44,6 +47,7 @@ func NewLLMService() *LLMService {
 			model:    model,
 			baseURL:  ollamaURL,
 			enabled:  true,
+			logger:   logpkg.Global(),
 		}
 	}
 
@@ -59,6 +63,7 @@ func NewLLMService() *LLMService {
 			model:    model,
 			baseURL:  "http://localhost:11434",
 			enabled:  true,
+			logger:   logpkg.Global(),
 		}
 	}
 
@@ -74,6 +79,7 @@ func NewLLMService() *LLMService {
 		model:    getOpenAIModel(),
 		baseURL:  "https://api.openai.com/v1",
 		enabled:  true,
+		logger:   logpkg.Global(),
 	}
 }
 
@@ -122,7 +128,9 @@ func (s *LLMService) GeneratePipeline(ctx context.Context, description, domain s
 	case ProviderOpenAI:
 		// Check if we should use mock response for testing
 		if os.Getenv("PIPEGEN_MOCK_OPENAI") == "true" {
-			fmt.Printf("🧪 Using mock OpenAI response for testing\n")
+			if s.logger != nil {
+				s.logger.Info("using mock openai response", "path", "generatePipeline")
+			}
 			response = s.getMockResponse(description)
 		} else {
 			response, err = s.callOpenAI(ctx, prompt)
@@ -154,7 +162,9 @@ func (s *LLMService) GeneratePipelineWithSchema(ctx context.Context, schemaJSON,
 		response, err = s.callOllama(ctx, prompt)
 	case ProviderOpenAI:
 		if os.Getenv("PIPEGEN_MOCK_OPENAI") == "true" {
-			fmt.Printf("🧪 Using mock OpenAI response for testing\n")
+			if s.logger != nil {
+				s.logger.Info("using mock openai response", "path", "generatePipelineWithSchema")
+			}
 			response = s.getMockResponse(description)
 		} else {
 			response, err = s.callOpenAI(ctx, prompt)
@@ -185,7 +195,9 @@ func (s *LLMService) GeneratePipelineWithCSVAnalysis(ctx context.Context, descri
 		response, err = s.callOllama(ctx, prompt)
 	case ProviderOpenAI:
 		if os.Getenv("PIPEGEN_MOCK_OPENAI") == "true" {
-			fmt.Printf("🧪 Using mock OpenAI response for testing (CSV analysis path)\n")
+			if s.logger != nil {
+				s.logger.Info("using mock openai response", "path", "generatePipelineWithCSVAnalysis")
+			}
 			response = s.getMockResponse(description)
 		} else {
 			response, err = s.callOpenAI(ctx, prompt)
@@ -493,10 +505,15 @@ func (s *LLMService) parseResponse(response string) (*GeneratedContent, error) {
 	var flexContent FlexibleGeneratedContent
 	if err := json.Unmarshal([]byte(jsonStr), &flexContent); err != nil {
 		// If parsing fails, log the full content for debugging
-		fmt.Printf("⚠️  Failed to parse JSON response.\n")
-		fmt.Printf("Raw LLM response:\n%s\n", response)
-		fmt.Printf("Extracted JSON:\n%s\n", jsonStr)
-		fmt.Printf("Parse error: %v\n", err)
+		if s.logger != nil {
+			s.logger.Warn("failed parse llm json", "err", err)
+		}
+		if s.logger != nil {
+			s.logger.Debug("raw llm response", "content", response)
+		}
+		if s.logger != nil {
+			s.logger.Debug("extracted json", "json", jsonStr)
+		}
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	logpkg "pipegen/internal/log"
+
 	"pipegen/internal/pipeline"
 	"pipegen/internal/types"
 
@@ -26,6 +28,7 @@ type StackDeployer struct {
 	flinkAddr          string
 	schemaRegistryAddr string
 	sqlGatewayAddr     string
+	logger             logpkg.Logger
 }
 
 // waitForLocalSQLGatewayReady polls the /v1/sessions endpoint until it returns 200 or timeout.
@@ -46,18 +49,24 @@ func (d *StackDeployer) waitForLocalSQLGatewayReady(ctx context.Context, timeout
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			lastErr = err
-			fmt.Printf("[Local Flink SQL Gateway] (readiness) transient error: %v\n", err)
+			if d.logger != nil {
+				d.logger.Warn("sql gateway readiness transient", "err", err)
+			}
 			time.Sleep(750 * time.Millisecond)
 			continue
 		}
 		_, _ = io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode == 200 {
-			fmt.Printf("[Local Flink SQL Gateway] Readiness confirmed (HTTP 200)\n")
+			if d.logger != nil {
+				d.logger.Info("sql gateway ready")
+			}
 			return nil
 		}
 		lastErr = fmt.Errorf("status %d", resp.StatusCode)
-		fmt.Printf("[Local Flink SQL Gateway] (readiness) status %d, retrying...\n", resp.StatusCode)
+		if d.logger != nil {
+			d.logger.Debug("sql gateway readiness retry", "status", resp.StatusCode)
+		}
 		time.Sleep(750 * time.Millisecond)
 	}
 	if lastErr == nil {
@@ -104,6 +113,7 @@ func NewStackDeployer(projectDir string) *StackDeployer {
 		flinkAddr:          flinkAddr,
 		schemaRegistryAddr: schemaRegistryAddr,
 		sqlGatewayAddr:     sqlGatewayAddr,
+		logger:             logpkg.Global(),
 	}
 }
 
@@ -153,13 +163,17 @@ func (d *StackDeployer) DeployFlinkJobs(ctx context.Context) error {
 
 	// Deploy each statement via Flink SQL Gateway
 	for _, stmt := range processedStatements {
-		fmt.Printf("📝 Deploying FlinkSQL job: %s\n", stmt.Name)
+		if d.logger != nil {
+			d.logger.Info("deploy flink sql", "statement", stmt.Name)
+		}
 
 		if err := d.deployFlinkStatement(ctx, stmt); err != nil {
 			return fmt.Errorf("failed to deploy statement %s: %w", stmt.Name, err)
 		}
 
-		fmt.Printf("  ✅ Deployed: %s\n", stmt.Name)
+		if d.logger != nil {
+			d.logger.Info("flink sql deployed", "statement", stmt.Name)
+		}
 	}
 
 	return nil
@@ -207,7 +221,7 @@ func (d *StackDeployer) extractTopicNames(statements []*types.SQLStatement) []st
 
 // createKafkaTopics creates Kafka topics with retry logic
 func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) error {
-	fmt.Printf("🔌 Connecting to Kafka at %s...\n", d.kafkaAddr)
+	d.logger.Info("connecting kafka", "addr", d.kafkaAddr)
 
 	// Create a Kafka client with proper configuration
 	transport := &kafka.Transport{
@@ -223,7 +237,7 @@ func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) 
 
 	// Retry topic creation with exponential backoff
 	for attempt := 1; attempt <= 5; attempt++ {
-		fmt.Printf("📝 Attempt %d: Creating Kafka topics...\n", attempt)
+		d.logger.Info("creating kafka topics", "attempt", attempt)
 
 		// Prepare topic configurations
 		topicConfigs := make([]kafka.TopicConfig, 0, len(topics))
@@ -248,24 +262,24 @@ func (d *StackDeployer) createKafkaTopics(ctx context.Context, topics []string) 
 					// Ignore "topic already exists" errors
 					if !strings.Contains(topicError.Error(), "already exists") &&
 						!strings.Contains(topicError.Error(), "TOPIC_ALREADY_EXISTS") {
-						fmt.Printf("⚠️  Failed to create topic %s: %v\n", topic, topicError)
+						d.logger.Warn("topic create failed", "topic", topic, "err", topicError)
 						allSuccess = false
 					} else {
-						fmt.Printf("  ✅ Topic %s already exists\n", topic)
+						d.logger.Info("topic exists", "topic", topic)
 					}
 				} else {
-					fmt.Printf("  ✅ Topic created: %s\n", topic)
+					d.logger.Info("topic created", "topic", topic)
 				}
 			}
 
 			if allSuccess {
-				fmt.Printf("✅ All topics created successfully\n")
+				d.logger.Info("all topics created")
 				return nil
 			}
 		}
 
 		if attempt < 5 {
-			fmt.Printf("⚠️  Topic creation attempt %d failed, retrying in %d seconds...\n", attempt, attempt*2)
+			d.logger.Warn("topic creation attempt failed", "attempt", attempt, "next_wait_s", attempt*2)
 			time.Sleep(time.Duration(attempt*2) * time.Second)
 		}
 	}
@@ -280,25 +294,33 @@ func (d *StackDeployer) registerSchemas(ctx context.Context, schemas map[string]
 	for name, schema := range schemas {
 		// Register value schema
 		valueSubject := d.getSchemaSubject(name, topics)
-		fmt.Printf("📋 Registering value schema: %s -> %s\n", name, valueSubject)
+		if d.logger != nil {
+			d.logger.Info("register value schema", "name", name, "subject", valueSubject)
+		}
 
 		if err := d.registerSchema(client, valueSubject, schema); err != nil {
 			return fmt.Errorf("failed to register value schema %s: %w", name, err)
 		}
 
-		fmt.Printf("  ✅ Value schema registered: %s\n", valueSubject)
+		if d.logger != nil {
+			d.logger.Info("value schema registered", "subject", valueSubject)
+		}
 
 		// For output schema, also register key schema for upsert operations
 		if name == "output" {
 			keySubject := d.getKeySchemaSubject(name, topics)
 			keySchema := d.createKeySchema(schema)
-			fmt.Printf("📋 Registering key schema: %s -> %s\n", name, keySubject)
+			if d.logger != nil {
+				d.logger.Info("register key schema", "name", name, "subject", keySubject)
+			}
 
 			if err := d.registerSchema(client, keySubject, keySchema); err != nil {
 				return fmt.Errorf("failed to register key schema %s: %w", name, err)
 			}
 
-			fmt.Printf("  ✅ Key schema registered: %s\n", keySubject)
+			if d.logger != nil {
+				d.logger.Info("key schema registered", "subject", keySubject)
+			}
 		}
 	}
 
@@ -429,7 +451,9 @@ func (d *StackDeployer) deployFlinkStatement(ctx context.Context, stmt *types.SQ
 	// Create a session first
 	sessionID, err := d.createFlinkSession(ctx, client)
 	if err != nil {
-		fmt.Printf("  ⚠️  Failed to create Flink session, trying fallback method: %v\n", err)
+		if d.logger != nil {
+			d.logger.Warn("failed create flink session using fallback", "err", err, "statement", stmt.Name)
+		}
 		return d.deployViaRESTAPI(client, stmt)
 	}
 
@@ -467,7 +491,9 @@ func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Cli
 	// Readiness wait (non-fatal) up to 8s
 	readyCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	if err := d.waitForLocalSQLGatewayReady(readyCtx, 8*time.Second); err != nil {
-		fmt.Printf("[Local Flink SQL Gateway] Readiness not confirmed before session attempts: %v (continuing)\n", err)
+		if d.logger != nil {
+			d.logger.Warn("sql gateway readiness not confirmed before session attempts", "err", err)
+		}
 	}
 	cancel()
 
@@ -490,35 +516,51 @@ func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Cli
 		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("attempt %d/%d: %w", attempt, maxAttempts, err)
-			fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+			if d.logger != nil {
+				d.logger.Warn("sql gateway session create attempt failed", "attempt", attempt, "err", lastErr)
+			}
 		} else {
 			body, rerr := io.ReadAll(resp.Body)
 			if cerr := resp.Body.Close(); cerr != nil {
-				fmt.Printf("failed to close session body: %v\n", cerr)
+				if d.logger != nil {
+					d.logger.Warn("failed close session body", "err", cerr)
+				}
 			}
 			if rerr != nil {
 				lastErr = fmt.Errorf("failed reading session response (attempt %d): %w", attempt, rerr)
-				fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+				if d.logger != nil {
+					d.logger.Warn("failed read session response", "attempt", attempt, "err", lastErr)
+				}
 			} else if resp.StatusCode == 200 {
 				id := d.extractSessionID(string(body))
 				if id != "" {
 					if attempt > 1 {
-						fmt.Printf("[Local Flink SQL Gateway] ✅ Session created after %d attempts. ID=%s\n", attempt, id)
+						if d.logger != nil {
+							d.logger.Info("sql session created", "attempt", attempt, "id", id)
+						}
 					} else {
-						fmt.Printf("[Local Flink SQL Gateway] ✅ Session created. ID=%s\n", id)
+						if d.logger != nil {
+							d.logger.Info("sql session created", "id", id)
+						}
 					}
 					return id, nil
 				}
 				lastErr = fmt.Errorf("attempt %d: session ID missing in response: %s", attempt, string(body))
-				fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+				if d.logger != nil {
+					d.logger.Warn("session id missing", "attempt", attempt, "err", lastErr)
+				}
 			} else {
 				lastErr = fmt.Errorf("attempt %d: non-200 status %d: %s", attempt, resp.StatusCode, string(body))
-				fmt.Printf("[Local Flink SQL Gateway] ⚠️  %v\n", lastErr)
+				if d.logger != nil {
+					d.logger.Warn("session create non-200", "attempt", attempt, "status", resp.StatusCode, "err", lastErr)
+				}
 			}
 		}
 
 		if attempt < maxAttempts {
-			fmt.Printf("[Local Flink SQL Gateway] ⏳ Retrying session creation in %s (attempt %d/%d)\n", backoff, attempt, maxAttempts)
+			if d.logger != nil {
+				d.logger.Info("retry session creation", "wait", backoff, "attempt", attempt, "max", maxAttempts)
+			}
 			timer := time.NewTimer(backoff)
 			select {
 			case <-ctx.Done():
@@ -560,7 +602,9 @@ func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *types.SQLSta
 	// For now, we'll create a simple JAR file that contains the SQL statement
 	// In a production environment, you'd want to create a proper Flink job
 
-	fmt.Printf("  ⚠️  SQL Gateway not available, using fallback method for: %s\n", stmt.Name)
+	if d.logger != nil {
+		d.logger.Warn("sql gateway unavailable using fallback", "statement", stmt.Name)
+	}
 
 	// Create a SQL file that can be executed later
 	sqlDir := filepath.Join(d.projectDir, "deployed-sql")
@@ -573,8 +617,12 @@ func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *types.SQLSta
 		return fmt.Errorf("failed to write SQL file: %w", err)
 	}
 
-	fmt.Printf("  📄 SQL statement saved to: %s\n", sqlFile)
-	fmt.Printf("  💡 Manual execution: Use Flink SQL CLI or Web UI to execute this statement\n")
+	if d.logger != nil {
+		d.logger.Info("sql statement saved", "file", sqlFile)
+	}
+	if d.logger != nil {
+		d.logger.Info("manual execution hint", "hint", "Use Flink SQL CLI or Web UI to execute this statement")
+	}
 
 	return nil
 }
@@ -583,6 +631,7 @@ func (d *StackDeployer) deployViaRESTAPI(client *http.Client, stmt *types.SQLSta
 type Deployer struct {
 	projectDir  string
 	projectName string
+	logger      logpkg.Logger
 }
 
 // NewDeployer creates a new deployer for Docker operations
@@ -590,6 +639,7 @@ func NewDeployer(projectDir, projectName string) *Deployer {
 	return &Deployer{
 		projectDir:  projectDir,
 		projectName: projectName,
+		logger:      logpkg.Global(),
 	}
 }
 
@@ -604,7 +654,9 @@ func (d *Deployer) CheckDockerAvailability() error {
 
 // StopStack stops the Docker Compose stack
 func (d *Deployer) StopStack() error {
-	fmt.Println("🛑 Stopping Docker containers...")
+	if d.logger != nil {
+		d.logger.Info("stopping docker containers")
+	}
 
 	cmd := exec.Command("docker", "compose", "down")
 	cmd.Dir = d.projectDir
@@ -612,7 +664,9 @@ func (d *Deployer) StopStack() error {
 		return fmt.Errorf("failed to stop containers: %w", err)
 	}
 
-	fmt.Println("✅ Containers stopped")
+	if d.logger != nil {
+		d.logger.Info("containers stopped")
+	}
 	return nil
 }
 
@@ -624,7 +678,9 @@ func (d *Deployer) RemoveVolumes() error {
 		return fmt.Errorf("failed to remove volumes: %w", err)
 	}
 
-	fmt.Println("✅ Volumes removed")
+	if d.logger != nil {
+		d.logger.Info("volumes removed")
+	}
 	return nil
 }
 
@@ -636,7 +692,9 @@ func (d *Deployer) RemoveImages() error {
 		return fmt.Errorf("failed to remove images: %w", err)
 	}
 
-	fmt.Println("✅ Images removed")
+	if d.logger != nil {
+		d.logger.Info("images removed")
+	}
 	return nil
 }
 
@@ -648,6 +706,8 @@ func (d *Deployer) CleanupOrphans() error {
 		return fmt.Errorf("failed to cleanup orphans: %w", err)
 	}
 
-	fmt.Println("✅ Orphaned containers cleaned up")
+	if d.logger != nil {
+		d.logger.Info("orphaned containers cleaned up")
+	}
 	return nil
 }

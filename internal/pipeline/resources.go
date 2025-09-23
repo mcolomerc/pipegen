@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/types"
 
 	"github.com/google/uuid"
@@ -24,15 +25,20 @@ type Resources struct {
 type ResourceManager struct {
 	config *Config
 	Kafka  *KafkaService
+	logger logpkg.Logger
 }
 
 // DeleteSchemas removes schemas from Schema Registry
 func (rm *ResourceManager) DeleteSchemas(ctx context.Context, resources *Resources, schemas map[string]*Schema) error {
-	fmt.Println("🗑️  Deleting schemas from Schema Registry...")
+	if rm.logger != nil {
+		rm.logger.Info("deleting schemas")
+	}
 	for name := range schemas {
 		subject := rm.getSchemaSubject(resources, name)
 		// TODO: Implement actual Schema Registry API call to delete schema
-		fmt.Printf("    🗑️  Deleting schema for subject: %s\n", subject)
+		if rm.logger != nil {
+			rm.logger.Debug("delete schema subject", "subject", subject)
+		}
 		// Simulated deletion
 	}
 	return nil
@@ -45,6 +51,7 @@ func NewResourceManager(config *Config) *ResourceManager {
 	return &ResourceManager{
 		config: config,
 		Kafka:  ks,
+		logger: logpkg.Global(),
 	}
 }
 
@@ -70,11 +77,15 @@ func (rm *ResourceManager) GenerateResources(statements []*types.SQLStatement) (
 				resources.OutputTopic = sqlTopics[0] // Same topic for input/output
 			}
 
-			fmt.Printf("📋 Using topics from SQL statements: %v\n", sqlTopics)
+			if rm.logger != nil {
+				rm.logger.Info("using topics from sql", "topics", fmt.Sprintf("%v", sqlTopics))
+			}
 			return resources, nil
 		} else {
 			// Fallback to default topics
-			fmt.Println("📋 No topics found in SQL statements, using default topics")
+			if rm.logger != nil {
+				rm.logger.Warn("no topics found in sql using defaults")
+			}
 			resources := &Resources{
 				Prefix:      "pipegen-local",
 				InputTopic:  "input-events",
@@ -185,41 +196,53 @@ func (rm *ResourceManager) extractTopicFromCreateTable(sql string) string {
 
 // CreateTopics creates the required Kafka topics
 func (rm *ResourceManager) CreateTopics(ctx context.Context, resources *Resources) error {
-	fmt.Printf("🔧 Creating topics with prefix: %s\n", resources.Prefix)
+	if rm.logger != nil {
+		rm.logger.Info("creating topics", "prefix", resources.Prefix)
+	}
 	for _, topic := range resources.Topics {
 		cfg := rm.GetDefaultTopicConfig(topic)
 		err := rm.Kafka.CreateTopic(ctx, topic, cfg.Partitions, cfg.ReplicationFactor)
 		if err != nil {
 			return fmt.Errorf("failed to create topic %s: %w", topic, err)
 		}
-		fmt.Printf("  ✅ Created topic: %s\n", topic)
+		if rm.logger != nil {
+			rm.logger.Info("topic created", "topic", topic)
+		}
 	}
 	return nil
 }
 
 // DeleteTopics removes the created Kafka topics
 func (rm *ResourceManager) DeleteTopics(ctx context.Context, resources *Resources) error {
-	fmt.Printf("🗑️  Deleting topics with prefix: %s\n", resources.Prefix)
+	if rm.logger != nil {
+		rm.logger.Info("deleting topics", "prefix", resources.Prefix)
+	}
 	for _, topic := range resources.Topics {
 		err := rm.Kafka.DeleteTopic(ctx, topic)
 		if err != nil {
 			return fmt.Errorf("failed to delete topic %s: %w", topic, err)
 		}
-		fmt.Printf("  ✅ Deleted topic: %s\n", topic)
+		if rm.logger != nil {
+			rm.logger.Info("topic deleted", "topic", topic)
+		}
 	}
 	return nil
 }
 
 // RegisterSchemas registers AVRO schemas in Schema Registry
 func (rm *ResourceManager) RegisterSchemas(ctx context.Context, resources *Resources, schemas map[string]*Schema) error {
-	fmt.Println("📋 Registering schemas in Schema Registry...")
+	if rm.logger != nil {
+		rm.logger.Info("registering schemas")
+	}
 
 	for name, schema := range schemas {
 		subject := rm.getSchemaSubject(resources, name)
 		if err := rm.registerSchema(ctx, subject, schema); err != nil {
 			return fmt.Errorf("failed to register schema %s: %w", name, err)
 		}
-		fmt.Printf("  ✅ Registered schema: %s -> %s\n", name, subject)
+		if rm.logger != nil {
+			rm.logger.Info("schema registered", "name", name, "subject", subject)
+		}
 	}
 
 	return nil
@@ -231,7 +254,9 @@ func (rm *ResourceManager) registerSchema(ctx context.Context, subject string, s
 	// This is a placeholder for the actual implementation
 
 	// Simulated schema registration
-	fmt.Printf("    📋 Registering schema for subject: %s\n", subject)
+	if rm.logger != nil {
+		rm.logger.Debug("register schema subject", "subject", subject)
+	}
 
 	// Here you would use the Confluent Schema Registry API to:
 	// 1. Check if schema already exists

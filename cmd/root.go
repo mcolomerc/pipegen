@@ -39,11 +39,13 @@ func init() {
 	rootCmd.PersistentFlags().String("flink-url", "http://localhost:8081", "Flink Job Manager URL")
 	rootCmd.PersistentFlags().String("schema-registry-url", "http://localhost:8082", "Schema Registry URL")
 	rootCmd.PersistentFlags().Bool("local-mode", true, "Use local Docker stack (no authentication)")
+	rootCmd.PersistentFlags().String("log-level", "info", "Log level: error|warn|info|debug (env: PIPEGEN_LOG_LEVEL)")
 
 	_ = viper.BindPFlag("bootstrap_servers", rootCmd.PersistentFlags().Lookup("bootstrap-servers"))
 	_ = viper.BindPFlag("flink_url", rootCmd.PersistentFlags().Lookup("flink-url"))
 	_ = viper.BindPFlag("schema_registry_url", rootCmd.PersistentFlags().Lookup("schema-registry-url"))
 	_ = viper.BindPFlag("local_mode", rootCmd.PersistentFlags().Lookup("local-mode"))
+	_ = viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
 
 	// Set defaults for local mode
 	viper.SetDefault("local_mode", true)
@@ -51,6 +53,7 @@ func init() {
 	viper.SetDefault("schema_registry_url", "http://localhost:8082")
 	viper.SetDefault("flink_url", "http://localhost:8081")
 	viper.SetDefault("flink_sql_gateway_url", "http://localhost:8083")
+	viper.SetDefault("log_level", "info")
 }
 
 // initConfig reads in config file and ENV variables.

@@ -49,6 +49,10 @@ func TestDeployStatement_Success(t *testing.T) {
 	defer srv.Close()
 	// Point FlinkURL at server base, ensuring gateway replacement logic keeps same host (no port change performed)
 	fd.config.FlinkURL = srv.URL
+	fd.config.SQLGatewayURL = ""
+	fd.config.Normalize()
+	fd.config.SQLGatewayURL = "" // force re-derive
+	fd.config.Normalize()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// Create session manually via helper under test
@@ -98,6 +102,10 @@ func TestDeployStatement_ErrorFlow(t *testing.T) {
 	}))
 	defer srv.Close()
 	fd.config.FlinkURL = srv.URL
+	fd.config.SQLGatewayURL = ""
+	fd.config.Normalize()
+	fd.config.SQLGatewayURL = ""
+	fd.config.Normalize()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	sid, err := fd.createSessionWithRetry(ctx, "pipegen-test", 2, 50*time.Millisecond)
@@ -138,6 +146,8 @@ func TestFetchOperationResult_Success(t *testing.T) {
 		}))
 		defer srv.Close()
 		fd.config.FlinkURL = srv.URL
+		fd.config.SQLGatewayURL = ""
+		fd.config.Normalize()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		sid, err := fd.createSessionWithRetry(ctx, "pipegen-test", 2, 50*time.Millisecond)
@@ -150,7 +160,7 @@ func TestFetchOperationResult_Success(t *testing.T) {
 			t.Fatalf("deployStatement failed: %v", err)
 		}
 		// Explicitly call fetchOperationResult to validate direct retrieval
-		res, err := fd.fetchOperationResult(ctx, strings.Replace(fd.config.FlinkURL, "8081", "8083", 1), opHandle)
+		res, err := fd.fetchOperationResult(ctx, fd.config.SQLGatewayURL, opHandle)
 		if err != nil {
 			t.Fatalf("fetchOperationResult error: %v", err)
 		}
@@ -184,6 +194,8 @@ func TestFetchOperationResult_Success(t *testing.T) {
 		}))
 		defer srv.Close()
 		fd.config.FlinkURL = srv.URL
+		fd.config.SQLGatewayURL = ""
+		fd.config.Normalize()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		sid, err := fd.createSessionWithRetry(ctx, "pipegen-test", 2, 50*time.Millisecond)
@@ -194,7 +206,7 @@ func TestFetchOperationResult_Success(t *testing.T) {
 		if _, err := fd.deployStatement(ctx, "finished-statement", "CREATE TABLE done (id STRING)"); err != nil {
 			t.Fatalf("deployStatement failed: %v", err)
 		}
-		res, err := fd.fetchOperationResult(ctx, strings.Replace(fd.config.FlinkURL, "8081", "8083", 1), opHandle)
+		res, err := fd.fetchOperationResult(ctx, fd.config.SQLGatewayURL, opHandle)
 		if err != nil {
 			t.Fatalf("fetchOperationResult error: %v", err)
 		}
