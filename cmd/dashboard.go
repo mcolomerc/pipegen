@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"pipegen/internal/dashboard"
+	logpkg "pipegen/internal/log"
+	"pipegen/internal/pipeline"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"pipegen/internal/dashboard"
-	"pipegen/internal/pipeline"
 )
 
 // dashboardCmd represents the dashboard command
@@ -90,7 +92,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	// Override with config file if provided
 	if configFile != "" {
 		// TODO: Load config from file when pipeline.LoadConfig is available
-		fmt.Printf("Config file specified: %s (not yet implemented)\n", configFile)
+		logpkg.Global().Info("⚙️  Config file specified (not yet implemented)", "config_file", configFile)
 	}
 
 	// Create dashboard server
@@ -106,7 +108,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	kafkaAddrs := []string{config.BootstrapServers}
 	dashboardServer.GetMetricsCollector().Configure(kafkaAddrs, config.FlinkURL, config.SchemaRegistryURL)
 
-	fmt.Printf("🚀 Starting PipeGen Dashboard on port %d...\n", dashboardPort)
+	logpkg.Global().Info("🚀 Starting PipeGen Dashboard", "port", dashboardPort)
 
 	// Start the dashboard server in a goroutine
 	serverDone := make(chan error, 1)
@@ -120,10 +122,10 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	// Open browser if requested
 	if dashboardAutoOpen {
 		url := fmt.Sprintf("http://localhost:%d", dashboardPort)
-		fmt.Printf("🌐 Opening dashboard in browser: %s\n", url)
+		logpkg.Global().Info("🌐 Opening dashboard in browser", "url", url)
 		if err := openBrowser(url); err != nil {
-			fmt.Printf("⚠️  Failed to open browser automatically: %v\n", err)
-			fmt.Printf("💡 Please open %s manually in your browser\n", url)
+			logpkg.Global().Warn("⚠️  Failed to open browser automatically", "error", err)
+			logpkg.Global().Info("💡 Please open the dashboard manually", "url", url)
 		}
 	}
 
@@ -131,19 +133,19 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		// Start pipeline execution with dashboard integration
 		err := runPipelineWithDashboard(ctx, config, dashboardServer)
 		if err != nil {
-			fmt.Printf("❌ Pipeline execution failed: %v\n", err)
+			logpkg.Global().Warn("❌ Pipeline execution failed", "error", err)
 		}
 	} else {
-		fmt.Println("📊 Dashboard running in standalone mode")
+		logpkg.Global().Info("📊 Dashboard running in standalone mode")
 
 		// Load SQL statements from project directory for display
 		err := loadSQLStatementsForDashboard(projectDir, dashboardServer)
 		if err != nil {
-			fmt.Printf("⚠️  Warning: Could not load SQL statements: %v\n", err)
+			logpkg.Global().Warn("⚠️  Warning: Could not load SQL statements", "error", err)
 		}
 
-		fmt.Printf("🌐 Visit http://localhost:%d to view the dashboard\n", dashboardPort)
-		fmt.Println("Press Ctrl+C to stop")
+		logpkg.Global().Info("🌐 Visit dashboard", "url", fmt.Sprintf("http://localhost:%d", dashboardPort))
+		logpkg.Global().Info("Press Ctrl+C to stop")
 	}
 
 	// Wait for shutdown signal
@@ -152,7 +154,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 
 	select {
 	case <-sigChan:
-		fmt.Println("\n🛑 Shutting down dashboard...")
+		logpkg.Global().Info("\n🛑 Shutting down dashboard...")
 		cancel()
 	case err := <-serverDone:
 		if err != nil {
@@ -165,15 +167,15 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	defer shutdownCancel()
 
 	if err := dashboardServer.Stop(shutdownCtx); err != nil {
-		fmt.Printf("⚠️  Error during dashboard shutdown: %v\n", err)
+		logpkg.Global().Warn("⚠️  Error during dashboard shutdown", "error", err)
 	}
 
-	fmt.Println("✅ Dashboard stopped")
+	logpkg.Global().Info("✅ Dashboard stopped")
 	return nil
 }
 
 func runPipelineWithDashboard(ctx context.Context, config *pipeline.Config, dashboardServer *dashboard.DashboardServer) error {
-	fmt.Println("🚀 Starting pipeline with dashboard integration...")
+	logpkg.Global().Info("🚀 Starting pipeline with dashboard integration...")
 
 	// Create pipeline runner
 	runner, err := pipeline.NewRunner(config)
@@ -396,7 +398,7 @@ func loadSQLStatementsForDashboard(projectDir string, dashboardServer *dashboard
 	for i, sqlFile := range sqlFiles {
 		content, err := os.ReadFile(sqlFile)
 		if err != nil {
-			fmt.Printf("⚠️  Warning: Could not read SQL file %s: %v\n", sqlFile, err)
+			logpkg.Global().Warn("⚠️  Warning: Could not read SQL file", "file", sqlFile, "error", err)
 			continue
 		}
 
@@ -429,7 +431,7 @@ func loadSQLStatementsForDashboard(projectDir string, dashboardServer *dashboard
 	metricsCollector := dashboardServer.GetMetricsCollector()
 	metricsCollector.SetFlinkMetrics(flinkMetrics)
 
-	fmt.Printf("📖 Loaded %d SQL statements for dashboard display\n", len(sqlFiles))
+	logpkg.Global().Info("📖 Loaded SQL statements for dashboard display", "count", len(sqlFiles))
 	return nil
 }
 

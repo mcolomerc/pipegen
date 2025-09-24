@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	logpkg "pipegen/internal/log"
+
 	"github.com/spf13/cobra"
 )
 
@@ -22,15 +24,15 @@ var updateCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		latest, err := getLatestVersion()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] Failed to fetch latest version: %v\n", err)
+			logpkg.Global().Error("Failed to fetch latest version", "error", err)
 			os.Exit(1)
 		}
-		fmt.Printf("[INFO] Latest version: %s\n", latest)
+		logpkg.Global().Info("Latest version", "version", latest)
 		if err := selfUpdate(latest); err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] Update failed: %v\n", err)
+			logpkg.Global().Error("Update failed", "error", err)
 			os.Exit(1)
 		}
-		fmt.Println("[SUCCESS] PipeGen updated successfully!")
+		logpkg.Global().Info("PipeGen updated successfully")
 	},
 }
 
@@ -41,7 +43,7 @@ func getLatestVersion() (string, error) {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close response body: %v\n", closeErr)
+			logpkg.Global().Warn("Warning: failed to close response body", "error", closeErr)
 		}
 	}()
 
@@ -95,14 +97,14 @@ func selfUpdate(version string) error {
 	}
 
 	url := fmt.Sprintf("https://github.com/mcolomerc/pipegen/releases/download/%s/pipegen-%s-%s%s", version, platform, arch, ext)
-	fmt.Printf("[INFO] Downloading: %s\n", url)
+	logpkg.Global().Info("Downloading update", "url", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close response body: %v\n", closeErr)
+			logpkg.Global().Warn("Warning: failed to close response body", "error", closeErr)
 		}
 	}()
 
@@ -113,7 +115,7 @@ func selfUpdate(version string) error {
 	}
 	defer func() {
 		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to remove temp file: %v\n", removeErr)
+			logpkg.Global().Warn("Warning: failed to remove temp file", "error", removeErr)
 		}
 	}()
 
@@ -179,7 +181,7 @@ func extractTarGz(archive, platform, arch string) error {
 			}
 			defer func() {
 				if closeErr := out.Close(); closeErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to close output file: %v\n", closeErr)
+					logpkg.Global().Warn("Warning: failed to close output file", "error", closeErr)
 				}
 			}()
 
@@ -200,7 +202,7 @@ func extractZip(archive, platform, arch string) error {
 	}
 	defer func() {
 		if closeErr := zipReader.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close zip reader: %v\n", closeErr)
+			logpkg.Global().Warn("Warning: failed to close zip reader", "error", closeErr)
 		}
 	}()
 
@@ -217,7 +219,7 @@ func extractZip(archive, platform, arch string) error {
 			}
 			defer func() {
 				if closeErr := out.Close(); closeErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to close output file: %v\n", closeErr)
+					logpkg.Global().Warn("Warning: failed to close output file", "error", closeErr)
 				}
 			}()
 

@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"pipegen/internal/docker"
+	logpkg "pipegen/internal/log"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"pipegen/internal/docker"
 )
 
 var deployCmd = &cobra.Command{
@@ -43,7 +45,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	startupTimeout, _ := cmd.Flags().GetDuration("startup-timeout")
 	clean, _ := cmd.Flags().GetBool("clean")
 
-	fmt.Println("🚀 Deploying local streaming pipeline stack...")
+	logpkg.Global().Info("🚀 Deploying local streaming pipeline stack...")
 
 	// Check if project directory exists
 	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
@@ -53,7 +55,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Check if docker-compose.yml exists, create if not
 	composePath := filepath.Join(projectDir, "docker-compose.yml")
 	if _, err := os.Stat(composePath); os.IsNotExist(err) {
-		fmt.Println("📝 Creating docker-compose.yml...")
+		logpkg.Global().Info("📝 Creating docker-compose.yml...")
 		if err := createDockerCompose(projectDir, withSchemaRegistry); err != nil {
 			return fmt.Errorf("failed to create docker-compose.yml: %w", err)
 		}
@@ -62,7 +64,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Check if flink-conf.yaml exists, create if not
 	flinkConfPath := filepath.Join(projectDir, "flink-conf.yaml")
 	if _, err := os.Stat(flinkConfPath); os.IsNotExist(err) {
-		fmt.Println("📝 Creating flink-conf.yaml...")
+		logpkg.Global().Info("📝 Creating flink-conf.yaml...")
 		if err := createFlinkConfig(projectDir); err != nil {
 			return fmt.Errorf("failed to create flink-conf.yaml: %w", err)
 		}
@@ -75,20 +77,20 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Clean existing containers if requested
 	if clean {
-		fmt.Println("🧹 Cleaning existing containers...")
+		logpkg.Global().Info("🧹 Cleaning existing containers...")
 		if err := dockerComposeDown(projectDir); err != nil {
-			fmt.Printf("⚠️  Warning: failed to clean containers: %v\n", err)
+			logpkg.Global().Warn("⚠️  Warning: failed to clean containers", "error", err)
 		}
 	}
 
 	// Start the stack
-	fmt.Println("🔄 Starting Docker Compose stack...")
+	logpkg.Global().Info("🔄 Starting Docker Compose stack...")
 	if err := dockerComposeUp(projectDir, detach); err != nil {
 		return fmt.Errorf("failed to start Docker Compose stack: %w", err)
 	}
 
 	// Wait for services to be ready
-	fmt.Println("⏳ Waiting for services to be ready...")
+	logpkg.Global().Info("⏳ Waiting for services to be ready...")
 	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 
@@ -97,29 +99,29 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create topics and register schemas
-	fmt.Println("📝 Setting up topics and schemas...")
+	logpkg.Global().Info("📝 Setting up topics and schemas...")
 	deployer := docker.NewStackDeployer(projectDir)
 	if err := deployer.SetupTopicsAndSchemas(ctx, withSchemaRegistry); err != nil {
 		return fmt.Errorf("failed to setup topics and schemas: %w", err)
 	}
 
 	// Deploy FlinkSQL jobs
-	fmt.Println("⚡ Deploying FlinkSQL jobs...")
+	logpkg.Global().Info("⚡ Deploying FlinkSQL jobs...")
 	if err := deployer.DeployFlinkJobs(ctx); err != nil {
 		return fmt.Errorf("failed to deploy FlinkSQL jobs: %w", err)
 	}
 
-	fmt.Println("✅ Local streaming pipeline stack deployed successfully!")
-	fmt.Println("\n📊 Services:")
-	fmt.Printf("  Kafka Broker:    %s\n", viper.GetString("bootstrap_servers"))
-	fmt.Printf("  Flink WebUI:     %s\n", viper.GetString("flink_url"))
+	logpkg.Global().Info("✅ Local streaming pipeline stack deployed successfully!")
+	logpkg.Global().Info("\n📊 Services:")
+	logpkg.Global().Info("  Kafka Broker", "bootstrap_servers", viper.GetString("bootstrap_servers"))
+	logpkg.Global().Info("  Flink WebUI", "flink_url", viper.GetString("flink_url"))
 	if withSchemaRegistry {
-		fmt.Printf("  Schema Registry: %s\n", viper.GetString("schema_registry_url"))
+		logpkg.Global().Info("  Schema Registry", "schema_registry_url", viper.GetString("schema_registry_url"))
 	}
-	fmt.Println("\n🔧 Management commands:")
-	fmt.Printf("  View logs:       docker-compose -f %s logs -f\n", composePath)
-	fmt.Printf("  Stop stack:      docker-compose -f %s down\n", composePath)
-	fmt.Printf("  Restart stack:   docker-compose -f %s restart\n", composePath)
+	logpkg.Global().Info("\n🔧 Management commands:")
+	logpkg.Global().Info("  View logs: docker-compose -f " + composePath + " logs -f")
+	logpkg.Global().Info("  Stop stack: docker-compose -f " + composePath + " down")
+	logpkg.Global().Info("  Restart stack: docker-compose -f " + composePath + " restart")
 
 	return nil
 }

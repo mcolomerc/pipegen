@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	logpkg "pipegen/internal/log"
+
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +32,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	projectDir, _ := cmd.Flags().GetString("project-dir")
 	checkConnectivity, _ := cmd.Flags().GetBool("check-connectivity")
 
-	fmt.Println("🔍 Validating project structure...")
+	logpkg.Global().Info("🔍 Validating project structure...")
 
 	// Check project structure
 	if err := validateProjectStructure(projectDir); err != nil {
@@ -53,12 +55,12 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	if checkConnectivity {
-		fmt.Println("🌐 Checking connectivity to Confluent Cloud...")
+		logpkg.Global().Info("🌐 Checking connectivity to Confluent Cloud...")
 		// TODO: Implement connectivity check
-		fmt.Println("⚠️  Connectivity check not implemented yet")
+		logpkg.Global().Info("⚠️  Connectivity check not implemented yet")
 	}
 
-	fmt.Println("✅ Project validation completed successfully!")
+	logpkg.Global().Info("✅ Project validation completed successfully!")
 	return nil
 }
 
@@ -71,7 +73,7 @@ func validateProjectStructure(projectDir string) error {
 		if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 			return fmt.Errorf("required directory missing: %s", dir)
 		}
-		fmt.Printf("✓ Directory exists: %s\n", dir)
+		logpkg.Global().Info("✓ Directory exists", "dir", dir)
 	}
 
 	for _, file := range requiredFiles {
@@ -79,7 +81,7 @@ func validateProjectStructure(projectDir string) error {
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			return fmt.Errorf("required file missing: %s", file)
 		}
-		fmt.Printf("✓ File exists: %s\n", file)
+		logpkg.Global().Info("✓ File exists", "file", file)
 	}
 
 	return nil
@@ -97,7 +99,7 @@ func validateSQLFiles(projectDir string) error {
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
 			sqlCount++
-			fmt.Printf("✓ SQL file found: %s\n", entry.Name())
+			logpkg.Global().Info("✓ SQL file found", "file", entry.Name())
 		}
 	}
 
@@ -105,7 +107,7 @@ func validateSQLFiles(projectDir string) error {
 		return fmt.Errorf("no SQL files found in sql/ directory")
 	}
 
-	fmt.Printf("✓ Found %d SQL files\n", sqlCount)
+	logpkg.Global().Info("✓ Found SQL files", "count", sqlCount)
 	return nil
 }
 
@@ -121,7 +123,7 @@ func validateAVROSchemas(projectDir string) error {
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".avsc") || strings.HasSuffix(entry.Name(), ".json")) {
 			schemaCount++
-			fmt.Printf("✓ AVRO schema found: %s\n", entry.Name())
+			logpkg.Global().Info("✓ AVRO schema found", "file", entry.Name())
 		}
 	}
 
@@ -129,6 +131,6 @@ func validateAVROSchemas(projectDir string) error {
 		return fmt.Errorf("no AVRO schema files found in schemas/ directory")
 	}
 
-	fmt.Printf("✓ Found %d AVRO schema files\n", schemaCount)
+	logpkg.Global().Info("✓ Found AVRO schema files", "count", schemaCount)
 	return nil
 }

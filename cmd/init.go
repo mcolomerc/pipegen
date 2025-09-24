@@ -10,6 +10,7 @@ import (
 
 	"pipegen/internal/generator"
 	"pipegen/internal/llm"
+	logpkg "pipegen/internal/log"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -61,9 +62,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Initializing streaming pipeline project: %s\n", projectName)
+	logpkg.Global().Info("📋 Initializing streaming pipeline project", "project", projectName)
 	if csvPath != "" {
-		fmt.Printf("📄 Using provided input CSV: %s\n", csvPath)
+		logpkg.Global().Info("📄 Using provided input CSV", "csv", csvPath)
 	}
 
 	localMode := viper.GetBool("local_mode")
@@ -79,8 +80,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("✅ Project %s initialized successfully!\n", projectName)
-	fmt.Printf("📁 Project structure created at: %s\n", projectPath)
+	logpkg.Global().Info("✅ Project initialized successfully", "project", projectName)
+	logpkg.Global().Info("📁 Project structure created", "path", projectPath)
 	printNextSteps(projectName, localMode, description != "")
 	return nil
 }
@@ -104,19 +105,19 @@ func validateInputFile(path, label string) error {
 
 func handleAIGeneration(projectName, projectPath string, localMode bool, inputSchemaPath, csvPath, description, domain string, llmService *llm.LLMService) error {
 	if !llmService.IsEnabled() {
-		fmt.Println("🤖 LLM service not available. Falling back to minimal generation.")
+		logpkg.Global().Info("🤖 LLM service not available. Falling back to minimal generation.")
 		if inputSchemaPath != "" {
-			fmt.Println("📋 Using provided input schema for schema-based generation")
+			logpkg.Global().Info("📋 Using provided input schema for schema-based generation")
 		} else {
-			fmt.Println("📋 No input schema provided; generating with default schema and templates")
+			logpkg.Global().Info("📋 No input schema provided; generating with default schema and templates")
 		}
 		return handleStandardGeneration(projectName, projectPath, localMode, inputSchemaPath, csvPath)
 	}
 
-	fmt.Printf("🤖 Generating pipeline with AI assistance (%s)...\n", llmService.GetProvider())
-	fmt.Printf("📝 Description: %s\n", description)
+	logpkg.Global().Info("🤖 Generating pipeline with AI assistance", "provider", llmService.GetProvider())
+	logpkg.Global().Info("📝 Description", "desc", description)
 	if domain != "" {
-		fmt.Printf("🏢 Domain: %s\n", domain)
+		logpkg.Global().Info("🏢 Domain", "domain", domain)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -150,8 +151,8 @@ func handleAIGeneration(projectName, projectPath string, localMode bool, inputSc
 		return fmt.Errorf("AI generation failed: %w", err)
 	}
 
-	fmt.Println("✨ AI generation completed!")
-	fmt.Printf("📊 Generated: %s\n", generatedContent.Description)
+	logpkg.Global().Info("✨ AI generation completed!")
+	logpkg.Global().Info("📊 Generated", "desc", generatedContent.Description)
 
 	finalInputSchema := generatedContent.InputSchema
 	if inputSchemaPath != "" {
@@ -179,9 +180,9 @@ func handleAIGeneration(projectName, projectPath string, localMode bool, inputSc
 		llmGen.SetInputCSVPath(csvPath)
 	}
 	if len(generatedContent.Optimizations) > 0 {
-		fmt.Println("\n💡 AI Optimization Suggestions:")
+		logpkg.Global().Info("💡 AI Optimization Suggestions:")
 		for _, opt := range generatedContent.Optimizations {
-			fmt.Printf("  • %s\n", opt)
+			logpkg.Global().Info("  • " + opt)
 		}
 	}
 	if csvPath != "" && inputSchemaPath == "" && strings.TrimSpace(llmGen.InputSchemaContent) == "" {
@@ -195,9 +196,9 @@ func handleAIGeneration(projectName, projectPath string, localMode bool, inputSc
 
 func handleStandardGeneration(projectName, projectPath string, localMode bool, inputSchemaPath, csvPath string) error {
 	if inputSchemaPath != "" {
-		fmt.Printf("📋 Using provided input schema: %s\n", inputSchemaPath)
+		logpkg.Global().Info("📋 Using provided input schema", "schema", inputSchemaPath)
 	} else {
-		fmt.Println("📋 Generating default input schema (use --input-schema to provide your own)")
+		logpkg.Global().Info("📋 Generating default input schema (use --input-schema to provide your own)")
 	}
 	gen, err := generator.NewProjectGenerator(projectName, projectPath, localMode)
 	if err != nil {
@@ -216,29 +217,29 @@ func handleStandardGeneration(projectName, projectPath string, localMode bool, i
 }
 
 func printNextSteps(projectName string, localMode bool, isAIGenerated bool) {
-	fmt.Println("\nNext steps:")
-	fmt.Printf("1. cd %s\n", projectName)
+	logpkg.Global().Info("\nNext steps:")
+	logpkg.Global().Info("1. cd " + projectName)
 
 	if localMode {
-		fmt.Println("2. Review and customize the generated files:")
-		fmt.Println("   • docker-compose.yml - Docker stack configuration")
-		fmt.Println("   • flink-conf.yaml - Flink configuration")
+		logpkg.Global().Info("2. Review and customize the generated files:")
+		logpkg.Global().Info("   • docker-compose.yml - Docker stack configuration")
+		logpkg.Global().Info("   • flink-conf.yaml - Flink configuration")
 		if isAIGenerated {
-			fmt.Println("   • sql/ - AI-generated SQL statements")
-			fmt.Println("   • schemas/ - AI-generated AVRO schemas")
-			fmt.Println("3. Deploy local stack: pipegen deploy")
-			fmt.Println("4. Run pipeline: pipegen run")
+			logpkg.Global().Info("   • sql/ - AI-generated SQL statements")
+			logpkg.Global().Info("   • schemas/ - AI-generated AVRO schemas")
+			logpkg.Global().Info("3. Deploy local stack: pipegen deploy")
+			logpkg.Global().Info("4. Run pipeline: pipegen run")
 		} else {
-			fmt.Println("   • sql/ - SQL statements for processing")
-			fmt.Println("   • schemas/ - AVRO schemas for events")
-			fmt.Println("3. Deploy local stack: pipegen deploy")
-			fmt.Println("4. Run pipeline: pipegen run")
+			logpkg.Global().Info("   • sql/ - SQL statements for processing")
+			logpkg.Global().Info("   • schemas/ - AVRO schemas for events")
+			logpkg.Global().Info("3. Deploy local stack: pipegen deploy")
+			logpkg.Global().Info("4. Run pipeline: pipegen run")
 		}
 
 		if !isAIGenerated {
-			fmt.Println("\n💡 Try AI-powered generation:")
-			fmt.Println("   • Ollama (local): export PIPEGEN_OLLAMA_MODEL=llama3.1")
-			fmt.Println("   • OpenAI (cloud): export PIPEGEN_OPENAI_API_KEY=your-key")
+			logpkg.Global().Info("\n💡 Try AI-powered generation:")
+			logpkg.Global().Info("   • Ollama (local): export PIPEGEN_OLLAMA_MODEL=llama3.1")
+			logpkg.Global().Info("   • OpenAI (cloud): export PIPEGEN_OPENAI_API_KEY=your-key")
 		}
 	}
 }

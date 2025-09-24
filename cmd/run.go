@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"pipegen/internal/dashboard"
+	logpkg "pipegen/internal/log"
 	"pipegen/internal/pipeline"
 
 	"github.com/spf13/cobra"
@@ -121,13 +122,13 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 		contentUpper := strings.ToUpper(string(b))
 		if strings.Contains(contentUpper, "'CONNECTOR' = 'FILESYSTEM'") && strings.Contains(contentUpper, "'FORMAT' = 'CSV'") {
 			config.CSVMode = true
-			fmt.Println("🧪 Detected filesystem CSV source table: enabling CSV mode (skip producer & consumer).")
+			logpkg.Global().Info("🧪 Detected filesystem CSV source table: enabling CSV mode (skip producer & consumer)")
 		}
 	}
 
 	// --- NEW LOGIC: Check if stack is running, deploy if needed ---
 	if !isDockerStackRunning(projectDir) {
-		fmt.Println("🧹 Docker stack not running. Deploying stack...")
+		logpkg.Global().Info("🧹 Docker stack not running. Deploying stack...")
 		deployCmd, _, _ := cmd.Root().Find([]string{"deploy"})
 		if deployCmd == nil {
 			return fmt.Errorf("deploy command not found")
@@ -137,17 +138,17 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to deploy stack: %w", err)
 		}
 	} else {
-		fmt.Println("✅ Docker stack is already running. Skipping deploy.")
+		logpkg.Global().Info("✅ Docker stack is already running. Skipping deploy.")
 	}
 	// --- END NEW LOGIC ---
 
 	if dryRun {
-		fmt.Println("🔍 Dry run mode - showing execution plan:")
+		logpkg.Global().Info("🔍 Dry run mode - showing execution plan:")
 		return showExecutionPlan(config)
 	}
 
 	if useDashboard {
-		fmt.Printf("🚀 Starting pipeline with live dashboard on port %d...\n", dashboardPort)
+		logpkg.Global().Info("🚀 Starting pipeline with live dashboard", "port", dashboardPort)
 		return runWithDashboard(config, dashboardPort)
 	}
 
@@ -160,13 +161,13 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 	// Set up report generation if enabled
 	if config.GenerateReport {
 		reportsPath := getReportsDir(config)
-		fmt.Printf("📊 Report generation enabled. Reports dir: %s\n", reportsPath)
+		logpkg.Global().Info("📊 Report generation enabled", "reports_dir", reportsPath)
 		// Create reports directory if it does not exist
 		if _, err := os.Stat(reportsPath); os.IsNotExist(err) {
 			if err := os.MkdirAll(reportsPath, 0755); err != nil {
 				return fmt.Errorf("failed to create reports directory: %w", err)
 			}
-			fmt.Printf("[Runner] Created reports directory: %s\n", reportsPath)
+			logpkg.Global().Info("[Runner] Created reports directory", "reports_dir", reportsPath)
 		}
 		// reportGenerator, err := dashboard.NewExecutionReportGenerator(reportsPath)
 		// if err != nil {
@@ -184,17 +185,17 @@ func runPipeline(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		<-sigChan
-		fmt.Println("\n🛑 Received interrupt signal, shutting down gracefully...")
+		logpkg.Global().Info("\n🛑 Received interrupt signal, shutting down gracefully...")
 		cancel()
 	}()
 
 	// Run pipeline
-	fmt.Println("🚀 Starting streaming pipeline...")
+	logpkg.Global().Info("🚀 Starting streaming pipeline...")
 	if err := runner.Run(ctx); err != nil {
 		return fmt.Errorf("pipeline execution failed: %w", err)
 	}
 
-	fmt.Println("✅ Pipeline completed successfully!")
+	logpkg.Global().Info("✅ Pipeline completed successfully!")
 	return nil
 }
 
@@ -218,44 +219,43 @@ func validateConfig() error {
 }
 
 func showExecutionPlan(config *pipeline.Config) error {
-	fmt.Println("📋 Execution Plan:")
-	fmt.Printf("  Project Directory: %s\n", config.ProjectDir)
+	logpkg.Global().Info("📋 Execution Plan:")
+	logpkg.Global().Info("  Project Directory:", "project_dir", config.ProjectDir)
 
 	// Show traffic pattern information
 	if config.TrafficPatterns != nil && config.TrafficPatterns.HasPatterns() {
-		fmt.Println("  Traffic Pattern:")
+		logpkg.Global().Info("  Traffic Pattern:")
 		for _, line := range strings.Split(config.TrafficPatterns.GetPatternSummary(), "\n") {
-			fmt.Printf("    %s\n", line)
+			logpkg.Global().Info("    " + line)
 		}
 	} else {
-		fmt.Printf("  Message Rate: %d msg/sec (constant)\n", config.MessageRate)
+		logpkg.Global().Info("  Message Rate", "rate_msg_per_sec", config.MessageRate)
 	}
-
-	fmt.Printf("  Producer Duration: %v\n", config.Duration)
-	fmt.Printf("  Pipeline Timeout: %v\n", config.PipelineTimeout)
-	fmt.Printf("  Bootstrap Servers: %s\n", config.BootstrapServers)
-	fmt.Printf("  Schema Registry: %s\n", config.SchemaRegistryURL)
-	fmt.Printf("  FlinkSQL URL: %s\n", config.FlinkURL)
-	fmt.Printf("  Local Mode: %t\n", config.LocalMode)
-	fmt.Printf("  Cleanup Resources: %t\n", config.Cleanup)
-	fmt.Println("\n📝 Steps that would be executed:")
-	fmt.Println("  1. Load SQL statements from sql/ directory")
-	fmt.Println("  2. Load AVRO schemas from schemas/ directory")
-	fmt.Println("  3. Generate dynamic topic names")
-	fmt.Println("  4. Create Kafka topics")
-	fmt.Println("  5. Register AVRO schemas")
-	fmt.Println("  6. Deploy FlinkSQL statements")
+	logpkg.Global().Info("  Producer Duration", "duration", config.Duration)
+	logpkg.Global().Info("  Pipeline Timeout", "timeout", config.PipelineTimeout)
+	logpkg.Global().Info("  Bootstrap Servers", "bootstrap_servers", config.BootstrapServers)
+	logpkg.Global().Info("  Schema Registry", "schema_registry", config.SchemaRegistryURL)
+	logpkg.Global().Info("  FlinkSQL URL", "flink_url", config.FlinkURL)
+	logpkg.Global().Info("  Local Mode", "local_mode", config.LocalMode)
+	logpkg.Global().Info("  Cleanup Resources", "cleanup", config.Cleanup)
+	logpkg.Global().Info("\n📝 Steps that would be executed:")
+	logpkg.Global().Info("  1. Load SQL statements from sql/ directory")
+	logpkg.Global().Info("  2. Load AVRO schemas from schemas/ directory")
+	logpkg.Global().Info("  3. Generate dynamic topic names")
+	logpkg.Global().Info("  4. Create Kafka topics")
+	logpkg.Global().Info("  5. Register AVRO schemas")
+	logpkg.Global().Info("  6. Deploy FlinkSQL statements")
 
 	if config.TrafficPatterns != nil && config.TrafficPatterns.HasPatterns() {
-		fmt.Println("  7. Start Kafka producer with dynamic traffic patterns")
+		logpkg.Global().Info("  7. Start Kafka producer with dynamic traffic patterns")
 	} else {
-		fmt.Println("  7. Start Kafka producer with constant rate")
+		logpkg.Global().Info("  7. Start Kafka producer with constant rate")
 	}
 
-	fmt.Println("  8. Start Kafka consumer")
-	fmt.Println("  9. Monitor pipeline execution")
+	logpkg.Global().Info("  8. Start Kafka consumer")
+	logpkg.Global().Info("  9. Monitor pipeline execution")
 	if config.Cleanup {
-		fmt.Println("  10. Clean up resources")
+		logpkg.Global().Info("  10. Clean up resources")
 	}
 	return nil
 }
@@ -283,10 +283,10 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 
 	// Open browser
 	url := fmt.Sprintf("http://localhost:%d", dashboardPort)
-	fmt.Printf("🌐 Opening dashboard in browser: %s\n", url)
+	logpkg.Global().Info("🌐 Opening dashboard in browser", "url", url)
 	if err := openBrowser(url); err != nil {
-		fmt.Printf("⚠️  Failed to open browser automatically: %v\n", err)
-		fmt.Printf("💡 Please open %s manually in your browser\n", url)
+		logpkg.Global().Warn("⚠️  Failed to open browser automatically", "error", err)
+		logpkg.Global().Info("💡 Please open the dashboard manually", "url", url)
 	}
 
 	// Create pipeline runner
@@ -343,17 +343,17 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	// Wait for completion or shutdown
 	select {
 	case <-sigChan:
-		fmt.Println("\n🛑 Received interrupt signal, shutting down...")
+		logpkg.Global().Info("\n🛑 Received interrupt signal, shutting down...")
 		cancel()
 	case err := <-pipelineDone:
 		if err != nil {
-			fmt.Printf("❌ Pipeline execution failed: %v\n", err)
+			logpkg.Global().Warn("❌ Pipeline execution failed", "error", err)
 		} else {
-			fmt.Println("✅ Pipeline completed successfully!")
+			logpkg.Global().Info("✅ Pipeline completed successfully!")
 		}
 	case err := <-serverDone:
 		if err != nil {
-			fmt.Printf("❌ Dashboard server error: %v\n", err)
+			logpkg.Global().Warn("❌ Dashboard server error", "error", err)
 		}
 	}
 
@@ -362,7 +362,7 @@ func runWithDashboard(config *pipeline.Config, dashboardPort int) error {
 	defer shutdownCancel()
 
 	if err := dashboardServer.Stop(shutdownCtx); err != nil {
-		fmt.Printf("⚠️  Error during dashboard shutdown: %v\n", err)
+		logpkg.Global().Warn("⚠️  Error during dashboard shutdown", "error", err)
 	}
 
 	return nil

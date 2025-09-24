@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/spf13/cobra"
 	"pipegen/internal/llm"
+	logpkg "pipegen/internal/log"
+
+	"github.com/spf13/cobra"
 )
 
 var checkCmd = &cobra.Command{
@@ -27,38 +28,38 @@ func init() {
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
-	fmt.Println("🔍 Checking AI provider configuration...")
+	logpkg.Global().Info("🔍 Checking AI provider configuration...")
 
 	llmService := llm.NewLLMService()
 
 	if !llmService.IsEnabled() {
-		fmt.Println("❌ No AI provider configured")
-		fmt.Println("\n💡 To enable AI features, choose one:")
-		fmt.Println("   • Ollama (local, free):")
-		fmt.Println("     1. Install: curl -fsSL https://ollama.com/install.sh | sh")
-		fmt.Println("     2. Pull model: ollama pull llama3.1")
-		fmt.Println("     3. Set: export PIPEGEN_OLLAMA_MODEL=llama3.1")
-		fmt.Println("   • OpenAI (cloud, requires API key):")
-		fmt.Println("     1. Get API key from https://platform.openai.com/")
-		fmt.Println("     2. Set: export PIPEGEN_OPENAI_API_KEY=your-key")
+		logpkg.Global().Info("❌ No AI provider configured")
+		logpkg.Global().Info("\n💡 To enable AI features, choose one:")
+		logpkg.Global().Info("   • Ollama (local, free):")
+		logpkg.Global().Info("     1. Install: curl -fsSL https://ollama.com/install.sh | sh")
+		logpkg.Global().Info("     2. Pull model: ollama pull llama3.1")
+		logpkg.Global().Info("     3. Set: export PIPEGEN_OLLAMA_MODEL=llama3.1")
+		logpkg.Global().Info("   • OpenAI (cloud, requires API key):")
+		logpkg.Global().Info("     1. Get API key from https://platform.openai.com/")
+		logpkg.Global().Info("     2. Set: export PIPEGEN_OPENAI_API_KEY=your-key")
 		return nil
 	}
 
-	fmt.Printf("✅ AI provider detected: %s\n", llmService.GetProviderInfo())
+	logpkg.Global().Info("✅ AI provider detected", "provider", llmService.GetProviderInfo())
 
 	// Test connectivity
-	fmt.Println("🔗 Testing connectivity...")
+	logpkg.Global().Info("🔗 Testing connectivity...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := llmService.CheckOllamaConnection(ctx); err != nil {
-		fmt.Printf("❌ Connection failed: %v\n", err)
+		logpkg.Global().Warn("❌ Connection failed", "error", err)
 		return nil
 	}
 
-	fmt.Println("✅ AI provider is ready!")
-	fmt.Println("\n💡 Try generating a pipeline:")
-	fmt.Println("   pipegen init my-pipeline --describe \"your pipeline description\"")
+	logpkg.Global().Info("✅ AI provider is ready!")
+	logpkg.Global().Info("\n💡 Try generating a pipeline:")
+	logpkg.Global().Info("   pipegen init my-pipeline --describe \"your pipeline description\"")
 
 	return nil
 }
