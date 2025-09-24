@@ -93,7 +93,6 @@ func (s *SimpleLogger) log(level Level, tag, msg string, kv []interface{}) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ts := s.clock().Format(time.RFC3339Nano)
 	if len(kv)%2 != 0 { // ensure even pairs
 		kv = append(kv, "_odd")
 	}
@@ -103,7 +102,12 @@ func (s *SimpleLogger) log(level Level, tag, msg string, kv []interface{}) {
 		v := fmt.Sprint(kv[i+1])
 		pairs += fmt.Sprintf(" %s=%s", k, v)
 	}
-	s.out.Printf("%s [%s] %s%s", ts, tag, msg, pairs)
+	if level == InfoLevel {
+		s.out.Printf("%s%s", msg, pairs)
+	} else {
+		ts := s.clock().Format(time.RFC3339Nano)
+		s.out.Printf("%s [%s] %s%s", ts, tag, msg, pairs)
+	}
 }
 
 func (s *SimpleLogger) Info(msg string, kv ...interface{})  { s.log(InfoLevel, "INFO", msg, kv) }
