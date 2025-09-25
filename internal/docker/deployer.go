@@ -50,7 +50,7 @@ func (d *StackDeployer) waitForLocalSQLGatewayReady(ctx context.Context, timeout
 		if err != nil {
 			lastErr = err
 			if d.logger != nil {
-				d.logger.Warn("sql gateway readiness transient", "err", err)
+				d.logger.Warn("⏳ sql gateway readiness transient", "err", err)
 			}
 			time.Sleep(750 * time.Millisecond)
 			continue
@@ -59,7 +59,7 @@ func (d *StackDeployer) waitForLocalSQLGatewayReady(ctx context.Context, timeout
 		_ = resp.Body.Close()
 		if resp.StatusCode == 200 {
 			if d.logger != nil {
-				d.logger.Info("sql gateway ready")
+				d.logger.Info("✅ sql gateway ready")
 			}
 			return nil
 		}
@@ -105,6 +105,13 @@ func NewStackDeployer(projectDir string) *StackDeployer {
 	sqlGatewayAddr := viper.GetString("flink_sql_gateway_url")
 	if sqlGatewayAddr == "" {
 		sqlGatewayAddr = "http://localhost:8083" // fallback to default
+	}
+
+	// Prefer IPv4 loopback for local environments to avoid IPv6 localhost
+	// connection-reset issues in some Docker setups. Users can still override
+	// via the `flink_sql_gateway_url` viper setting / PIPEGEN_FLINK_SQL_GATEWAY_URL.
+	if strings.Contains(sqlGatewayAddr, "localhost") {
+		sqlGatewayAddr = strings.ReplaceAll(sqlGatewayAddr, "localhost", "127.0.0.1")
 	}
 
 	return &StackDeployer{
@@ -517,7 +524,7 @@ func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Cli
 		if err != nil {
 			lastErr = fmt.Errorf("attempt %d/%d: %w", attempt, maxAttempts, err)
 			if d.logger != nil {
-				d.logger.Warn("sql gateway session create attempt failed", "attempt", attempt, "err", lastErr)
+				d.logger.Warn("⚠️ sql gateway session create attempt failed", "attempt", attempt, "err", lastErr)
 			}
 		} else {
 			body, rerr := io.ReadAll(resp.Body)
@@ -536,30 +543,30 @@ func (d *StackDeployer) createFlinkSession(ctx context.Context, client *http.Cli
 				if id != "" {
 					if attempt > 1 {
 						if d.logger != nil {
-							d.logger.Info("sql session created", "attempt", attempt, "id", id)
+							d.logger.Info("✅ sql session created after retries", "attempt", attempt, "id", id)
 						}
 					} else {
 						if d.logger != nil {
-							d.logger.Info("sql session created", "id", id)
+							d.logger.Info("✅ sql session created", "id", id)
 						}
 					}
 					return id, nil
 				}
 				lastErr = fmt.Errorf("attempt %d: session ID missing in response: %s", attempt, string(body))
 				if d.logger != nil {
-					d.logger.Warn("session id missing", "attempt", attempt, "err", lastErr)
+					d.logger.Warn("⚠️ session id missing in response", "attempt", attempt, "err", lastErr)
 				}
 			} else {
 				lastErr = fmt.Errorf("attempt %d: non-200 status %d: %s", attempt, resp.StatusCode, string(body))
 				if d.logger != nil {
-					d.logger.Warn("session create non-200", "attempt", attempt, "status", resp.StatusCode, "err", lastErr)
+					d.logger.Warn("⚠️ session create non-200", "attempt", attempt, "status", resp.StatusCode, "err", lastErr)
 				}
 			}
 		}
 
 		if attempt < maxAttempts {
 			if d.logger != nil {
-				d.logger.Info("retry session creation", "wait", backoff, "attempt", attempt, "max", maxAttempts)
+				d.logger.Info("🔁 retry session creation", "wait", backoff, "attempt", attempt, "max", maxAttempts)
 			}
 			timer := time.NewTimer(backoff)
 			select {

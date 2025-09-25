@@ -83,18 +83,23 @@ services:
     networks:
       - pipegen-network
 
-  # Flink SQL Gateway
+  # Flink SQL Gateway (use REST backend to interact with JobManager REST API)
   sql-gateway:
     image: {{ .FlinkImage }}
-    container_name: sql-gateway
+    container_name: pipegen-sql-gateway
     command: >
       sh -c " 
       cp /opt/flink/lib/connectors/*.jar /opt/flink/lib/ && 
-      bin/sql-gateway.sh start-foreground -Dsql-gateway.endpoint.rest.address=0.0.0.0 -Dsql-gateway.endpoint.rest.port=8083 -Djobmanager.rpc.address=flink-jobmanager -Drest.address=flink-jobmanager -Drest.bind-port=8081
+      bin/sql-gateway.sh start-foreground \
+        -Dsql-gateway.endpoint.rest.address=0.0.0.0 \
+        -Dsql-gateway.endpoint.rest.port=8083 \
+        -Dsql-gateway.backend.type=rest \
+        -Dsql-gateway.backend.rest.address=flink-jobmanager \
+        -Dsql-gateway.backend.rest.port=8081
       "
     ports:
-      - "8083:8083" 
-    volumes: 
+      - "8083:8083"
+    volumes:
       - ./connectors:/opt/flink/lib/connectors
       - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
       - ./flink-entrypoint.sh:/flink-entrypoint.sh

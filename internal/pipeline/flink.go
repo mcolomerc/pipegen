@@ -110,14 +110,16 @@ func (fd *FlinkDeployer) waitForSQLGatewayReady(ctx context.Context, baseURL str
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			lastErr = err
-			fd.logger.Warn("sql gateway readiness transient error", "error", err)
+			// Transient network/connectivity issues while Flink SQL Gateway starts
+			fd.logger.Warn("⏳ sql gateway readiness transient", "error", err)
 			time.Sleep(750 * time.Millisecond)
 			continue
 		}
 		_, _ = io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode == 200 { // Ready
-			fd.logger.Info("sql gateway readiness confirmed")
+			// Keep INFO concise but with emoji for user-facing clarity
+			fd.logger.Info("✅ sql gateway readiness confirmed")
 			return nil
 		}
 		lastErr = fmt.Errorf("status %d", resp.StatusCode)
@@ -567,7 +569,7 @@ func (fd *FlinkDeployer) createSessionWithRetry(ctx context.Context, sessionName
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("session creation attempt %d/%d failed: %w", attempt, maxAttempts, err)
-			fd.logger.Warn("session creation attempt failed", "attempt", attempt, "max", maxAttempts, "error", err)
+			fd.logger.Warn("⚠️ sql gateway session creation transient", "attempt", attempt, "max", maxAttempts, "error", err)
 		} else {
 			body, rerr := io.ReadAll(resp.Body)
 			if cerr := resp.Body.Close(); cerr != nil {
@@ -580,23 +582,23 @@ func (fd *FlinkDeployer) createSessionWithRetry(ctx context.Context, sessionName
 				id, perr := parseSessionID(body)
 				if perr == nil {
 					if attempt > 1 {
-						fd.logger.Info("session created after attempts", "attempts", attempt, "session_id", id)
+						fd.logger.Info("✅ session created after retries", "attempts", attempt, "session_id", id)
 					} else {
-						fd.logger.Info("session created", "session_id", id)
+						fd.logger.Info("✅ session created", "session_id", id)
 					}
 					return id, nil
 				}
 				lastErr = fmt.Errorf("attempt %d: session parse failure: %v body=%s", attempt, perr, string(body))
-				fd.logger.Warn("session parse failure", "attempt", attempt, "error", perr, "body", string(body))
+				fd.logger.Warn("⚠️ session parse failure", "attempt", attempt, "error", perr, "body", string(body))
 			} else {
 				lastErr = fmt.Errorf("attempt %d: non-200 status %d: %s", attempt, resp.StatusCode, string(body))
-				fd.logger.Warn("non-200 session create status", "attempt", attempt, "status", resp.StatusCode, "body", string(body))
+				fd.logger.Warn("⚠️ non-200 session create status", "attempt", attempt, "status", resp.StatusCode, "body", string(body))
 			}
 		}
 
 		// Backoff before next attempt if not last
 		if attempt < maxAttempts {
-			fd.logger.Info("retrying session creation", "next_backoff", backoff.String(), "attempt", attempt, "max", maxAttempts)
+			fd.logger.Info("🔁 retrying session creation", "next_backoff", backoff.String(), "attempt", attempt, "max", maxAttempts)
 			timer := time.NewTimer(backoff)
 			select {
 			case <-ctx.Done():

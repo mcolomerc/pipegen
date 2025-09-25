@@ -22,6 +22,8 @@ func (g *DockerComposeGenerator) Generate(withSchemaRegistry bool) (string, erro
 
 	// Add Flink services
 	services = append(services, g.generateFlinkJobManager())
+	// Add SQL Gateway service (REST backend)
+	services = append(services, g.generateSqlGateway())
 	services = append(services, g.generateFlinkTaskManager())
 
 	// Add Schema Registry if requested
@@ -90,12 +92,13 @@ func (g *DockerComposeGenerator) generateFlinkJobManager() string {
     container_name: pipegen-flink-jobmanager
     ports:
       - "8081:8081"
+      - "6123:6123"
     command: jobmanager
     depends_on:
       kafka:
         condition: service_healthy
     environment:
-      FLINK_PROPERTIES: "jobmanager.rpc.address: flink-jobmanager"
+      FLINK_PROPERTIES: "jobmanager.rpc.address: flink-jobmanager\njobmanager.rpc.port: 6123\nrest.address: flink-jobmanager\nrest.bind-port: 8081"
     volumes:
       - flink-data:/opt/flink/data
       - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
@@ -106,6 +109,7 @@ func (g *DockerComposeGenerator) generateFlinkJobManager() string {
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 `
 }
 
@@ -124,6 +128,34 @@ func (g *DockerComposeGenerator) generateFlinkTaskManager() string {
     volumes:
       - flink-data:/opt/flink/data
       - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    networks:
+      - pipegen-network`
+}
+
+func (g *DockerComposeGenerator) generateSqlGateway() string {
+	return `  sql-gateway:
+    image: flink:1.18.0-scala_2.12-java11
+    container_name: pipegen-sql-gateway
+    command: >
+      sh -c "\
+      cp /opt/flink/lib/connectors/*.jar /opt/flink/lib/ && \
+      bin/sql-gateway.sh start-foreground \
+        -Dsql-gateway.endpoint.rest.address=0.0.0.0 \
+        -Dsql-gateway.endpoint.rest.port=8083 \
+        -Dsql-gateway.backend.type=rest \
+        -Dsql-gateway.backend.rest.address=flink-jobmanager \
+        -Dsql-gateway.backend.rest.port=8081\
+      "
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./connectors:/opt/flink/lib/connectors
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+      - ./flink-entrypoint.sh:/flink-entrypoint.sh
+      - ./data:/opt/flink/data/input
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
     networks:
       - pipegen-network`
 }

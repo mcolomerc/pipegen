@@ -46,3 +46,10 @@ logger.table.name: org.apache.flink.table
 logger.table.level: DEBUG
 blob.server.port: 6124
 query.server.port: 6125
+
+# SQL Gateway settings (REST backend) - ensure compatibility with Flink 2.1 SQL Gateway
+sql-gateway.endpoint.rest.address: 0.0.0.0
+sql-gateway.endpoint.rest.port: 8083
+sql-gateway.backend.type: rest
+sql-gateway.backend.rest.address: flink-jobmanager
+sql-gateway.backend.rest.port: 8081
